@@ -298,7 +298,7 @@ Current job data:
             to_email=sender_email, route='update', sender_name=sender_name,
             job_number=job_number, job_name=project_info['projectName'],
             subject_line=subject_line, original_email=original_email,
-            files_url=folder_url
+            files_url=folder_url, results=results
         )
         results['email'] = email_result
         print(f"[update] Email: {email_result.get('success')}")
