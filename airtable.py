@@ -1,10 +1,6 @@
 """
 Dot Workers - Airtable Utils
-Airtable lookups for workers.
-
-Workers need to:
-- Look up email body from Traffic table
-- Look up job details from Projects table
+Shared data lookups for all workers.
 """
 
 import os
@@ -25,7 +21,6 @@ TIMEOUT = 10.0
 
 
 def _headers():
-    """Standard Airtable headers"""
     return {
         'Authorization': f'Bearer {AIRTABLE_API_KEY}',
         'Content-Type': 'application/json'
@@ -33,7 +28,6 @@ def _headers():
 
 
 def _url(table):
-    """Build Airtable URL for a table"""
     return f'https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{table}'
 
 
@@ -43,10 +37,8 @@ def _url(table):
 
 def get_email_body(internet_message_id):
     """
-    Retrieve email body from Traffic table by internetMessageId.
-    Traffic logs the full email body when it receives emails.
-    
-    Returns the email body string or None if not found.
+    Retrieve email body from Traffic table.
+    Brain logs it there when email arrives.
     """
     if not AIRTABLE_API_KEY or not internet_message_id:
         print(f"[airtable] Missing API key or message ID")
@@ -86,8 +78,7 @@ def get_email_body(internet_message_id):
 
 def get_project(job_number):
     """
-    Look up a job by job number in Projects table.
-    
+    Look up a job by job number.
     Returns tuple: (record_id, project_info, error)
     """
     if not AIRTABLE_API_KEY or not job_number:
@@ -149,7 +140,6 @@ def get_project(job_number):
 def write_update(job_record_id, update_text, update_due=None):
     """
     Write an update to the Updates table.
-    
     Returns tuple: (record_id, error)
     """
     if not AIRTABLE_API_KEY or not job_record_id:
@@ -184,8 +174,6 @@ def write_update(job_record_id, update_text, update_due=None):
 def update_project(job_record_id, stage=None, status=None, with_client=None):
     """
     Update a project's stage/status/withClient.
-    Only updates fields that are provided and different from current.
-    
     Returns tuple: (success, error)
     """
     if not AIRTABLE_API_KEY or not job_record_id:
@@ -201,7 +189,7 @@ def update_project(job_record_id, stage=None, status=None, with_client=None):
             fields['With Client?'] = with_client
         
         if not fields:
-            return True, None  # Nothing to update
+            return True, None
         
         response = httpx.patch(
             f"{_url(PROJECTS_TABLE)}/{job_record_id}",
