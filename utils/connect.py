@@ -77,7 +77,7 @@ def _failure_box(title, subtitle):
         <tr>
           <td width="28" style="vertical-align: top; padding-right: 12px;">
             <div style="width: 24px; height: 24px; background: #ef4444; border-radius: 50%; text-align: center; line-height: 24px;">
-              <span style="color: white; font-size: 14px;">✕</span>
+              <span style="color: white; font-size: 14px;">✗</span>
             </div>
           </td>
           <td style="vertical-align: top;">
@@ -89,6 +89,75 @@ def _failure_box(title, subtitle):
     </td>
   </tr>
 </table>"""
+
+
+def _checklist_item(success, text):
+    """Build a single checklist item - tick or cross"""
+    if success:
+        return f'<div style="margin-bottom: 8px; color: #333;"><span style="color: #22c55e; margin-right: 8px;">✓</span>{text}</div>'
+    else:
+        return f'<div style="margin-bottom: 8px; color: #999;"><span style="color: #ef4444; margin-right: 8px;">✗</span>{text}</div>'
+
+
+def _files_button(url):
+    """Build red pill button for files link"""
+    return f'<a href="{url}" style="display: inline-block; border: 2px solid #ED1C24; color: #ED1C24; text-decoration: none; padding: 8px 20px; border-radius: 50px; font-size: 14px; font-weight: 500; margin-top: 8px;">› Here\'s the files</a>'
+
+
+def _build_checklist(results, files_url=None):
+    """
+    Build checklist HTML from results dict.
+    
+    Returns tuple: (checklist_html, has_any_failure, files_button_html)
+    """
+    items = []
+    has_failure = False
+    
+    # Files
+    file_result = results.get('file')
+    if file_result:
+        if file_result.get('success') and file_result.get('filed'):
+            count = file_result.get('count', 0)
+            if count > 0:
+                items.append(_checklist_item(True, f"{count} file{'s' if count != 1 else ''} filed"))
+        elif file_result.get('error'):
+            has_failure = True
+            if 'No job bag' in file_result.get('error', ''):
+                items.append(_checklist_item(False, "Files not filed (no job bag)"))
+            else:
+                items.append(_checklist_item(False, "Files not filed"))
+    
+    # Airtable
+    airtable_result = results.get('airtable')
+    if airtable_result:
+        if airtable_result.get('success'):
+            items.append(_checklist_item(True, "Job updated"))
+        else:
+            has_failure = True
+            items.append(_checklist_item(False, "Job not updated"))
+    
+    # Teams
+    teams_result = results.get('teams')
+    if teams_result:
+        if teams_result.get('success'):
+            items.append(_checklist_item(True, "Posted to Teams"))
+        elif teams_result.get('skipped'):
+            has_failure = True
+            items.append(_checklist_item(False, "Teams skipped (no channel)"))
+        else:
+            has_failure = True
+            items.append(_checklist_item(False, "Teams post failed"))
+    
+    checklist_html = ''
+    if items:
+        checklist_html = f'<div style="margin: 16px 0;">{"".join(items)}</div>'
+    
+    # Files button (only if files were successfully filed)
+    button_html = ''
+    if files_url and file_result and file_result.get('success') and file_result.get('filed'):
+        button_html = _files_button(files_url)
+    
+    return checklist_html, has_failure, button_html
 
 
 # ===================
@@ -130,17 +199,17 @@ def post_to_teams(team_id, channel_id, subject, body, job_number=None):
 # ===================
 
 def send_confirmation(to_email, route, sender_name=None, job_number=None, 
-                      job_name=None, subject_line=None, original_email=None):
-    """Send confirmation email after successful action"""
+                      job_name=None, subject_line=None, original_email=None,
+                      files_url=None, results=None):
+    """
+    Send confirmation email after successful action.
+    
+    If results dict is provided, shows a checklist of what happened.
+    If files_url is provided and files were filed, includes button to files.
+    """
     first_name = _get_first_name(sender_name)
     
-    friendly_text = {
-        'update': 'Job updated',
-        'file': 'Files filed',
-        'triage': 'Job triaged',
-        'newjob': 'New job created',
-    }.get(route, 'Request completed')
-    
+    # Build title
     if job_number and job_name:
         box_title = f"{job_number} | {job_name}"
     elif job_number:
@@ -148,14 +217,44 @@ def send_confirmation(to_email, route, sender_name=None, job_number=None,
     else:
         box_title = "Done"
     
-    subtitle = {
-        'update': 'Status updated',
-        'file': 'Filed to job folder',
-        'triage': 'New job created',
-        'newjob': 'Added to pipeline',
-    }.get(route, 'Completed')
-    
-    content = f"""<p style="margin: 0 0 20px 0;">Hey {first_name},</p>
+    # Build checklist if we have results
+    if results:
+        checklist_html, has_failure, button_html = _build_checklist(results, files_url)
+        
+        # Dynamic intro based on success/failure
+        if has_failure:
+            intro = "Mostly sorted, here's what I had."
+        else:
+            intro = "All sorted, here's what's done."
+        
+        # Build content with checklist box
+        content = f"""<p style="margin: 0 0 20px 0;">Hey {first_name},</p>
+<p style="margin: 0 0 12px 0;">{intro}</p>
+
+<div style="background: #f9f9f9; border-radius: 0 8px 8px 0; padding: 16px; margin-bottom: 20px; border-left: 4px solid #ED1C24;">
+  <div style="font-weight: 600; color: #333; margin-bottom: 12px;">{box_title}</div>
+  {checklist_html}
+  {button_html}
+</div>
+
+<p style="margin: 0;">Dot</p>"""
+    else:
+        # Fallback to old style if no results
+        friendly_text = {
+            'update': 'Job updated',
+            'file': 'Files filed',
+            'triage': 'Job triaged',
+            'newjob': 'New job created',
+        }.get(route, 'Request completed')
+        
+        subtitle = {
+            'update': 'Status updated',
+            'file': 'Filed to job folder',
+            'triage': 'New job created',
+            'newjob': 'Added to pipeline',
+        }.get(route, 'Completed')
+        
+        content = f"""<p style="margin: 0 0 20px 0;">Hey {first_name},</p>
 <p style="margin: 0 0 20px 0;">All sorted. {friendly_text}.</p>
 
 {_success_box(box_title, subtitle)}
@@ -180,7 +279,7 @@ def send_confirmation(to_email, route, sender_name=None, job_number=None,
             'body': original_email.get('content', '')
         }
     
-    print(f"[connect] Confirmation: {friendly_text} -> {to_email}")
+    print(f"[connect] Confirmation: {route} -> {to_email}")
     
     if not PA_POSTMAN_URL:
         print(f"[connect] PA_POSTMAN_URL not configured")
