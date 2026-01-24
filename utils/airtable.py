@@ -154,7 +154,7 @@ def write_update(job_record_id, update_text, update_due=None):
         }
         
         if update_due:
-            update_data['fields']['Update due'] = update_due
+            update_data['fields']['Update Due'] = update_due
         
         response = httpx.post(
             _url(UPDATES_TABLE), 
