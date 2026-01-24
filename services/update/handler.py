@@ -3,6 +3,15 @@ Update Service
 Processes job updates from email content.
 
 GO IN → DO THING → SEND COMMS → GET OUT
+
+Steps:
+1. File attachments (if any)
+2. Get email body from Traffic table
+3. Look up job
+4. Claude extracts update
+5. Write to Airtable
+6. Post to Teams
+7. Send confirmation
 """
 
 from flask import jsonify
@@ -12,7 +21,7 @@ import json
 import os
 from datetime import date, timedelta
 
-from utils import airtable, connect
+from utils import airtable, connect, file
 
 # ===================
 # CLAUDE CLIENT
@@ -60,12 +69,13 @@ def process_update(data):
     """
     Process a job update.
     
-    1. Get email body from Traffic table
-    2. Look up job
-    3. Claude extracts update
-    4. Write to Airtable
-    5. Post to Teams
-    6. Send confirmation
+    1. File attachments (if any)
+    2. Get email body from Traffic table
+    3. Look up job
+    4. Claude extracts update
+    5. Write to Airtable
+    6. Post to Teams
+    7. Send confirmation
     """
     job_number = data.get('jobNumber', '')
     internet_message_id = data.get('internetMessageId', '')
@@ -74,10 +84,20 @@ def process_update(data):
     subject_line = data.get('subjectLine', '')
     team_id = data.get('teamId')
     channel_id = data.get('teamsChannelId')
+    files_url = data.get('filesUrl', '')
+    
+    # Attachment info
+    has_attachments = data.get('hasAttachments', False)
+    attachment_names = data.get('attachmentNames', [])
+    
+    # For .eml file
+    received_datetime = data.get('receivedDateTime', '')
+    recipients = data.get('allRecipients', [])
     
     print(f"[update] === PROCESSING ===")
     print(f"[update] Job: {job_number}")
     print(f"[update] Sender: {sender_email}")
+    print(f"[update] Has attachments: {has_attachments}")
     
     # ===================
     # VALIDATE
@@ -88,9 +108,49 @@ def process_update(data):
     if not internet_message_id:
         return jsonify({'success': False, 'error': 'No internetMessageId provided'}), 400
     
+    # Track results for each step
+    results = {
+        'file': None,
+        'airtable': None,
+        'teams': None,
+        'email': None
+    }
+    
     try:
         # ===================
-        # 1. GET EMAIL BODY
+        # 1. FILE ATTACHMENTS (if any)
+        # ===================
+        if has_attachments and attachment_names:
+            print(f"[update] Filing {len(attachment_names)} attachments...")
+            
+            # Get email body early for .eml file
+            email_body_for_eml = airtable.get_email_body(internet_message_id)
+            
+            file_result = file.file_to_sharepoint(
+                job_number=job_number,
+                attachment_names=attachment_names,
+                files_url=files_url,
+                route='update',
+                email_content=email_body_for_eml,
+                sender_name=sender_name,
+                sender_email=sender_email,
+                recipients=recipients,
+                subject=subject_line,
+                received_datetime=received_datetime
+            )
+            
+            results['file'] = file_result
+            
+            if file_result.get('success'):
+                print(f"[update] Filed: {file_result.get('count', 0)} files to {file_result.get('destination')}")
+            else:
+                print(f"[update] Filing failed: {file_result.get('error')}")
+                # Don't fail the whole update if filing fails - continue with other steps
+        else:
+            print(f"[update] No attachments to file")
+        
+        # ===================
+        # 2. GET EMAIL BODY
         # ===================
         print(f"[update] Looking up email body...")
         email_body = airtable.get_email_body(internet_message_id)
@@ -102,12 +162,12 @@ def process_update(data):
                 to_email=sender_email, route='update', error_message=error_msg,
                 sender_name=sender_name, job_number=job_number, subject_line=subject_line
             )
-            return jsonify({'success': False, 'error': error_msg}), 400
+            return jsonify({'success': False, 'error': error_msg, 'results': results}), 400
         
         print(f"[update] Email body: {len(email_body)} chars")
         
         # ===================
-        # 2. LOOK UP JOB
+        # 3. LOOK UP JOB
         # ===================
         print(f"[update] Looking up job...")
         job_record_id, project_info, lookup_error = airtable.get_project(job_number)
@@ -118,7 +178,7 @@ def process_update(data):
                 to_email=sender_email, route='update', error_message=lookup_error,
                 sender_name=sender_name, job_number=job_number, subject_line=subject_line
             )
-            return jsonify({'success': False, 'error': lookup_error})
+            return jsonify({'success': False, 'error': lookup_error, 'results': results})
         
         print(f"[update] Found: {project_info['projectName']}")
         
@@ -128,7 +188,7 @@ def process_update(data):
             channel_id = project_info.get('channelId')
         
         # ===================
-        # 3. CLAUDE EXTRACTS
+        # 4. CLAUDE EXTRACTS
         # ===================
         print(f"[update] Calling Claude...")
         
@@ -163,7 +223,7 @@ Current job data:
         print(f"[update] Claude: {update_summary}")
         
         # ===================
-        # 4. WRITE TO AIRTABLE
+        # 5. WRITE TO AIRTABLE
         # ===================
         print(f"[update] Writing to Airtable...")
         
@@ -171,12 +231,14 @@ Current job data:
         
         if write_error:
             print(f"[update] {write_error}")
+            results['airtable'] = {'success': False, 'error': write_error}
             connect.send_failure(
                 to_email=sender_email, route='update', error_message=write_error,
                 sender_name=sender_name, job_number=job_number, subject_line=subject_line
             )
-            return jsonify({'success': False, 'error': write_error})
+            return jsonify({'success': False, 'error': write_error, 'results': results})
         
+        results['airtable'] = {'success': True, 'recordId': update_record_id}
         print(f"[update] Written: {update_record_id}")
         
         # Update project if changed
@@ -198,7 +260,7 @@ Current job data:
             )
         
         # ===================
-        # 5. POST TO TEAMS
+        # 6. POST TO TEAMS
         # ===================
         teams_message = analysis.get('teamsMessage', {})
         teams_subject = teams_message.get('subject', f'UPDATE: {job_number}')
@@ -212,25 +274,33 @@ Current job data:
             team_id=team_id, channel_id=channel_id,
             subject=teams_subject, body=teams_body_with_context, job_number=job_number
         )
+        results['teams'] = teams_result
         print(f"[update] Teams: {teams_result.get('success')}")
         
         # ===================
-        # 6. SEND CONFIRMATION
+        # 7. SEND CONFIRMATION
         # ===================
         original_email = {
             'senderName': sender_name,
             'senderEmail': sender_email,
             'subject': subject_line,
-            'receivedDateTime': data.get('receivedDateTime', ''),
+            'receivedDateTime': received_datetime,
             'content': email_body
         }
+        
+        # Include folder URL if files were filed
+        folder_url = None
+        if results['file'] and results['file'].get('success'):
+            folder_url = results['file'].get('folderUrl')
         
         print(f"[update] Sending confirmation...")
         email_result = connect.send_confirmation(
             to_email=sender_email, route='update', sender_name=sender_name,
             job_number=job_number, job_name=project_info['projectName'],
-            subject_line=subject_line, original_email=original_email
+            subject_line=subject_line, original_email=original_email,
+            files_url=folder_url
         )
+        results['email'] = email_result
         print(f"[update] Email: {email_result.get('success')}")
         
         # ===================
@@ -246,8 +316,10 @@ Current job data:
             'stage': new_stage,
             'status': new_status,
             'withClient': new_with_client,
-            'teamsPosted': teams_result.get('success', False),
-            'emailSent': email_result.get('success', False)
+            'results': results,
+            'filesFiled': results['file'].get('count', 0) if results['file'] else 0,
+            'teamsPosted': results['teams'].get('success', False) if results['teams'] else False,
+            'emailSent': results['email'].get('success', False) if results['email'] else False
         })
         
     except json.JSONDecodeError as e:
@@ -257,7 +329,7 @@ Current job data:
             error_message=f'Claude returned invalid JSON: {str(e)}',
             sender_name=sender_name, job_number=job_number, subject_line=subject_line
         )
-        return jsonify({'success': False, 'error': f'Invalid JSON: {str(e)}'}), 500
+        return jsonify({'success': False, 'error': f'Invalid JSON: {str(e)}', 'results': results}), 500
         
     except Exception as e:
         print(f"[update] Error: {e}")
@@ -267,4 +339,4 @@ Current job data:
             to_email=sender_email, route='update', error_message=str(e),
             sender_name=sender_name, job_number=job_number, subject_line=subject_line
         )
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e), 'results': results}), 500
