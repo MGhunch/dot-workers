@@ -16,6 +16,7 @@ AIRTABLE_BASE_ID = os.environ.get('AIRTABLE_BASE_ID', 'app8CI7NAZqhQ4G1Y')
 TRAFFIC_TABLE = 'Traffic'
 PROJECTS_TABLE = 'Projects'
 UPDATES_TABLE = 'Updates'
+CLIENTS_TABLE = 'Clients'
 
 TIMEOUT = 10.0
 
@@ -29,6 +30,51 @@ def _headers():
 
 def _url(table):
     return f'https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{table}'
+
+
+# ===================
+# CLIENTS TABLE
+# ===================
+
+def get_client_sharepoint(client_code):
+    """
+    Look up SharePoint URL from Clients table by client code.
+    Returns SharePoint URL string or None.
+    
+    The field in Airtable is called 'Sharepoint ID' and contains
+    URLs like 'https://hunch.sharepoint.com/sites/OneNZ'
+    """
+    if not AIRTABLE_API_KEY or not client_code:
+        return None
+    
+    try:
+        params = {
+            'filterByFormula': f"{{Client code}}='{client_code}'"
+        }
+        
+        response = httpx.get(
+            _url(CLIENTS_TABLE), 
+            headers=_headers(), 
+            params=params, 
+            timeout=TIMEOUT
+        )
+        response.raise_for_status()
+        
+        records = response.json().get('records', [])
+        if not records:
+            print(f"[airtable] No client found for code: {client_code}")
+            return None
+        
+        sharepoint_url = records[0]['fields'].get('Sharepoint ID', None)
+        
+        if not sharepoint_url:
+            print(f"[airtable] No SharePoint URL configured for: {client_code}")
+            
+        return sharepoint_url
+        
+    except Exception as e:
+        print(f"[airtable] Error looking up client SharePoint: {e}")
+        return None
 
 
 # ===================
