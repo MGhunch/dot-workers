@@ -6,7 +6,7 @@ Teams channel creation via PA Setupbot.
 import os
 import httpx
 
-from utils.airtable import _headers, _url, PROJECTS_TABLE
+from utils.airtable import _headers, _url, PROJECTS_TABLE, get_client_sharepoint
 
 PA_SETUPBOT_URL = os.environ.get('PA_SETUPBOT_URL', '')
 TIMEOUT = 30.0  # Channel creation might take a few seconds
@@ -37,10 +37,17 @@ def setup_teams_channel(team_id, job_number, job_name, record_id):
     # Build channel name: "LAB 055 - Campaign Refresh"
     channel_name = f"{job_number} - {job_name}"
     
+    # Extract client code from job number (e.g., "LAB" from "LAB 055")
+    client_code = job_number.split()[0] if job_number else None
+    
+    # Look up SharePoint URL for this client
+    sharepoint_url = get_client_sharepoint(client_code) if client_code else None
+    
     print(f'[setup] === SETUP TEAMS CHANNEL ===')
     print(f'[setup] Team ID: {team_id}')
     print(f'[setup] Channel name: {channel_name}')
     print(f'[setup] Record ID: {record_id}')
+    print(f'[setup] SharePoint URL: {sharepoint_url}')
     
     # ===================
     # CALL PA SETUPBOT
@@ -72,7 +79,15 @@ def setup_teams_channel(team_id, job_number, job_name, record_id):
         
         channel_id = result.get('channelId')
         channel_url = result.get('channelUrl')
-        files_url = result.get('filesUrl')
+        
+        # Construct Files URL from SharePoint site + channel name
+        # Pattern: {sharepointUrl}/Shared Documents/{channelName}
+        if sharepoint_url:
+            files_url = f"{sharepoint_url}/Shared Documents/{channel_name}"
+            print(f'[setup] Constructed Files URL: {files_url}')
+        else:
+            files_url = ''
+            print(f'[setup] No SharePoint URL for client {client_code}, Files URL will be empty')
         
     except httpx.TimeoutException:
         print('[setup] PA request timed out')
