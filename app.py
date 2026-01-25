@@ -9,6 +9,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 from services.update.handler import process_update
+from utils.setup import setup_teams_channel
 
 app = Flask(__name__)
 CORS(app)
@@ -24,10 +25,17 @@ def update():
     return process_update(request.get_json())
 
 
-# Future services:
-# @app.route('/newjob', methods=['POST'])
-# def newjob():
-#     return process_newjob(request.get_json())
+@app.route('/setup', methods=['POST'])
+def setup():
+    """Setup Teams channel for new job"""
+    data = request.get_json()
+    result = setup_teams_channel(
+        data.get('teamId'),
+        data.get('jobNumber'),
+        data.get('jobName'),
+        data.get('recordId')
+    )
+    return jsonify(result)
 
 
 # ===================
@@ -40,8 +48,8 @@ def health():
     return jsonify({
         'status': 'healthy',
         'service': 'Dot Workers',
-        'version': '2.0',
-        'services': ['update']
+        'version': '2.1',
+        'services': ['update', 'setup']
     })
 
 
