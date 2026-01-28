@@ -24,7 +24,7 @@ def health():
     return jsonify({
         'status': 'healthy',
         'service': 'Dot Workers',
-        'endpoints': ['/update', '/horoscope']
+        'endpoints': ['/update', '/horoscope', '/setup']
     })
 
 
@@ -50,6 +50,18 @@ def horoscope():
     from services.horoscopes.handler import get_horoscope
     data = request.get_json()
     return get_horoscope(data)
+
+
+# ===================
+# SETUP SERVICE
+# ===================
+
+@app.route('/setup', methods=['POST'])
+def setup():
+    """Set up a new job from an email brief"""
+    from services.setup.handler import process_setup
+    data = request.get_json()
+    return process_setup(data)
 
 
 # ===================
