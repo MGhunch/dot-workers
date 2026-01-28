@@ -104,6 +104,11 @@ def _files_button(url):
     return f'<a href="{url}" style="display: inline-block; border: 2px solid #ED1C24; color: #ED1C24; text-decoration: none; padding: 8px 20px; border-radius: 50px; font-size: 14px; font-weight: 500; margin-top: 8px;">› Here\'s the files</a>'
 
 
+def _channel_button(url):
+    """Build red pill button for Teams channel link"""
+    return f'<a href="{url}" style="display: inline-block; border: 2px solid #ED1C24; color: #ED1C24; text-decoration: none; padding: 8px 20px; border-radius: 50px; font-size: 14px; font-weight: 500; margin-top: 8px;">› Open in Teams</a>'
+
+
 def _build_checklist(results, files_url=None):
     """
     Build checklist HTML from results dict.
@@ -158,6 +163,63 @@ def _build_checklist(results, files_url=None):
         button_html = _files_button(files_url)
     
     return checklist_html, has_failure, button_html
+
+
+def _build_setup_checklist(results):
+    """
+    Build checklist HTML for setup results.
+    
+    Returns tuple: (checklist_html, has_any_failure)
+    """
+    items = []
+    has_failure = False
+    
+    # Project
+    project_result = results.get('project')
+    if project_result:
+        if project_result.get('success'):
+            items.append(_checklist_item(True, "Job created"))
+        else:
+            has_failure = True
+            items.append(_checklist_item(False, "Job not created"))
+    
+    # Tracker
+    tracker_result = results.get('tracker')
+    if tracker_result:
+        if tracker_result.get('success'):
+            items.append(_checklist_item(True, "Added to Tracker"))
+        else:
+            has_failure = True
+            items.append(_checklist_item(False, "Tracker not updated"))
+    
+    # Channel
+    channel_result = results.get('channel')
+    if channel_result:
+        if channel_result.get('success'):
+            items.append(_checklist_item(True, "Teams channel created"))
+        elif channel_result.get('skipped'):
+            has_failure = True
+            items.append(_checklist_item(False, "Teams channel skipped (no Team ID)"))
+        else:
+            has_failure = True
+            items.append(_checklist_item(False, "Teams channel not created"))
+    
+    # Teams post
+    teams_post_result = results.get('teams_post')
+    if teams_post_result:
+        if teams_post_result.get('success'):
+            items.append(_checklist_item(True, "Brief posted to Teams"))
+        elif teams_post_result.get('skipped'):
+            pass  # Don't show - redundant with channel skipped
+        else:
+            has_failure = True
+            items.append(_checklist_item(False, "Brief not posted"))
+    
+    checklist_html = ''
+    if items:
+        checklist_html = f'<div style="margin: 16px 0;">{"".join(items)}</div>'
+    
+    return checklist_html, has_failure
 
 
 # ===================
@@ -296,6 +358,80 @@ def send_confirmation(to_email, route, sender_name=None, job_number=None,
 
 
 # ===================
+# SETUP CONFIRMATION EMAIL
+# ===================
+
+def send_setup_confirmation(to_email, sender_name=None, job_number=None,
+                            job_name=None, channel_url=None, subject_line=None,
+                            original_email=None, results=None):
+    """
+    Send confirmation email after new job setup.
+    
+    Shows what was created and provides link to Teams channel.
+    """
+    first_name = _get_first_name(sender_name)
+    
+    # Build title
+    box_title = f"{job_number} | {job_name}" if job_number and job_name else job_number or "New Job"
+    
+    # Build checklist
+    checklist_html, has_failure = _build_setup_checklist(results) if results else ('', False)
+    
+    # Dynamic intro
+    if has_failure:
+        intro = "Mostly set up - a couple of things didn't quite work."
+    else:
+        intro = "All set up and ready to go."
+    
+    # Channel button
+    button_html = _channel_button(channel_url) if channel_url else ''
+    
+    content = f"""<p style="margin: 0 0 20px 0;">Hey {first_name},</p>
+<p style="margin: 0 0 12px 0;">{intro}</p>
+
+<div style="background: #f9f9f9; border-radius: 0 8px 8px 0; padding: 16px; margin-bottom: 20px; border-left: 4px solid #ED1C24;">
+  <div style="font-weight: 600; color: #333; margin-bottom: 12px;">{box_title}</div>
+  {checklist_html}
+  {button_html}
+</div>
+
+<p style="margin: 0;">Dot</p>"""
+    
+    body_html = _email_wrapper(content)
+    subject = f"Set up: {job_number} - {job_name}" if job_number else f"Re: {subject_line}"
+    
+    payload = {
+        'to': to_email,
+        'subject': subject,
+        'body': body_html
+    }
+    
+    if original_email:
+        payload['replyTo'] = {
+            'from': original_email.get('senderName', ''),
+            'fromEmail': original_email.get('senderEmail', ''),
+            'sent': original_email.get('receivedDateTime', ''),
+            'subject': original_email.get('subject', ''),
+            'body': original_email.get('content', '')
+        }
+    
+    print(f"[connect] Setup confirmation -> {to_email}")
+    
+    if not PA_POSTMAN_URL:
+        print(f"[connect] PA_POSTMAN_URL not configured")
+        return {'success': False, 'error': 'PA_POSTMAN_URL not configured'}
+    
+    try:
+        response = httpx.post(PA_POSTMAN_URL, json=payload, timeout=TIMEOUT)
+        success = response.status_code in [200, 202]
+        print(f"[connect] Email: {success} ({response.status_code})")
+        return {'success': success, 'response_code': response.status_code}
+    except Exception as e:
+        print(f"[connect] Email error: {e}")
+        return {'success': False, 'error': str(e)}
+
+
+# ===================
 # FAILURE EMAIL
 # ===================
 
@@ -310,6 +446,7 @@ def send_failure(to_email, route, error_message, sender_name=None,
         'file': "Couldn't file attachments",
         'triage': "Couldn't create job",
         'newjob': "Couldn't create job",
+        'setup': "Couldn't set up job",
     }.get(route, "Something went wrong")
     
     content = f"""<p style="margin: 0 0 20px 0;">Hey {first_name},</p>
