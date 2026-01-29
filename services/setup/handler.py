@@ -65,59 +65,57 @@ def _get_working_days_from_today(days=5):
     return current.strftime('%Y-%m-%d')
 
 
-def _format_teams_brief(job_number, job_name, brief):
+def _format_teams_brief(job_number, job_name, brief, update_due=None, update_url=None, files_url=None):
     """
     Format the brief for Teams posting.
     Uses the extracted brief fields, shows TBC for missing items.
     """
-    sections = []
+    lines = []
     
-    # THE JOB - required
+    # What's the job?
     the_job = brief.get('theJob') or f"Set up {job_name}"
-    sections.append(f"**THE JOB**\n{the_job}")
+    lines.append(f"**What's the job?**")
+    lines.append(the_job)
+    lines.append("")
     
-    # THE NEED - optional
-    the_need = brief.get('theNeed')
-    if the_need:
-        sections.append(f"**THE NEED**\n{the_need}")
+    # Who's owning it?
+    owner = brief.get('owner')
+    lines.append(f"**Who's owning it?**")
+    lines.append(owner or "TBC")
+    lines.append("")
     
-    # WHO - optional
-    who = brief.get('who')
-    if who:
-        sections.append(f"**WHO?**\n{who}")
-    
-    # WHAT - optional but show TBC if missing
-    what = brief.get('what')
-    if what:
-        sections.append(f"**WHAT?**\n{what}")
-    else:
-        sections.append(f"**WHAT?**\nTBC")
-    
-    # WHY - optional
-    why = brief.get('why')
-    if why:
-        sections.append(f"**WHY?**\n{why}")
-    
-    # WHEN - optional but show TBC if missing
-    when = brief.get('when')
-    if when:
-        sections.append(f"**WHEN?**\n{when}")
-    else:
-        sections.append(f"**WHEN?**\nTBC")
-    
-    # COSTS - optional but show TBC if missing
+    # Tracker
     costs = brief.get('costs')
-    if costs:
-        sections.append(f"**COSTS**\n{costs}")
+    lines.append(f"**Tracker:**")
+    lines.append(costs or "TBC")
+    lines.append("")
+    
+    # When?
+    when = brief.get('when')
+    lines.append(f"**When?**")
+    
+    # Format update due date nicely if present
+    if update_due:
+        try:
+            from datetime import datetime
+            due_date = datetime.strptime(update_due, '%Y-%m-%d')
+            due_formatted = due_date.strftime('%-d %b')  # e.g., "6 Feb"
+        except:
+            due_formatted = update_due
+        lines.append(f"Next update due: {due_formatted}")
     else:
-        sections.append(f"**COSTS**\nTBC - check with requestor")
+        lines.append("Next update due: TBC")
     
-    # OTHER - optional
-    other = brief.get('other')
-    if other:
-        sections.append(f"**OTHER**\n{other}")
+    lines.append(f"Live in: {when or 'TBC'}")
+    lines.append("")
     
-    return "\n\n".join(sections)
+    # Links
+    if update_url:
+        lines.append(f"[Update the project here]({update_url})")
+    if files_url:
+        lines.append(f"[See files here]({files_url})")
+    
+    return "\n".join(lines)
 
 
 # ===================
@@ -338,8 +336,26 @@ Subject: {subject_line}
             print(f"[setup] Skipping Teams post - no channel")
             results['teams_post'] = {'success': False, 'skipped': True}
         else:
-            teams_subject = f"NEW: {job_number} - {job_name}"
-            teams_body = _format_teams_brief(job_number, job_name, brief)
+            # Construct URLs for the Teams post
+            # Format job number for URL: "ONS 080" -> "ONS080"
+            job_number_url = job_number.replace(' ', '')
+            update_url = f"https://dot.hunch.co.nz/?view=wip&job={job_number_url}"
+            
+            # Get SharePoint URL for files link
+            sharepoint_url = airtable.get_client_sharepoint(client_code)
+            files_url = None
+            if sharepoint_url:
+                files_url = f"{sharepoint_url}/Shared Documents/{job_number} - {job_name}"
+            
+            teams_subject = f"New job: {job_number} - {job_name}"
+            teams_body = _format_teams_brief(
+                job_number, 
+                job_name, 
+                brief, 
+                update_due=update_due,
+                update_url=update_url,
+                files_url=files_url
+            )
             
             teams_result = connect.post_to_teams(
                 team_id=team_id,
