@@ -9,7 +9,7 @@ Steps:
 2. Claude extracts brief details
 3. Reserve job number
 4. Create Project record
-5. Create Tracker record
+5. Create Tracker record (costs go here)
 6. Create Teams channel
 7. Post brief to Teams
 8. Send confirmation email
@@ -132,7 +132,7 @@ def process_setup(data):
     2. Claude extracts brief details
     3. Reserve job number
     4. Create Project record
-    5. Create Tracker record
+    5. Create Tracker record (costs go here)
     6. Create Teams channel
     7. Post brief to Teams
     8. Send confirmation email
@@ -248,17 +248,17 @@ Subject: {subject_line}
             description_parts.append(brief['what'])
         description = ' | '.join(description_parts) if description_parts else None
         
+        # Note: costs/ballpark go to Tracker table, not Projects
         project_record_id, project_error = airtable.create_project(
             job_number=job_number,
             job_name=job_name,
-            client_code=client_code,
+            client_name=client_name,  # Text field for Client column
             description=description,
             owner=owner,
             stage='Triage',
             status='Incoming',
             update_due=update_due,
-            live_date='Tbc',
-            ballpark=costs
+            live_date='Tbc'
         )
         
         if project_error:
@@ -294,7 +294,8 @@ Subject: {subject_line}
             project_record_id=project_record_id,
             spend=spend,
             spend_type='Project budget',
-            notes=brief.get('theJob')
+            notes=brief.get('theJob'),
+            ballpark=bool(costs)  # True if costs mentioned (it's an estimate)
         )
         
         if tracker_error:
