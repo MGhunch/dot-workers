@@ -192,14 +192,20 @@ def process_update(data):
         # ===================
         print(f"[update] Calling Claude...")
         
+        # Format recipients for Claude
+        recipients_str = ', '.join(recipients) if recipients else 'Unknown'
+        
         today = date.today()
         context = f"""
 Today's date: {today.strftime('%A, %d %B %Y')}
 
+Email metadata:
+- Sender: {sender_name} <{sender_email}>
+- Recipients (TO/CC): {recipients_str}
+
 Current job data:
 - Job Number: {job_number}
 - Project Name: {project_info['projectName']}
-- Stage: {project_info['stage']}
 - Status: {project_info['status']}
 - With Client: {project_info['withClient']}
 - Current Update: {project_info['currentUpdate']}
@@ -221,6 +227,7 @@ Current job data:
         update_due = analysis.get('updateDue') or _get_working_days_from_today(5)
         
         print(f"[update] Claude: {update_summary}")
+        print(f"[update] Direction: {analysis.get('direction', 'unknown')}")
         
         # ===================
         # 5. WRITE TO AIRTABLE
@@ -242,19 +249,16 @@ Current job data:
         print(f"[update] Written: {update_record_id}")
         
         # Update project if changed
-        new_stage = analysis.get('stage')
         new_status = analysis.get('status')
         new_with_client = analysis.get('withClient')
         
-        stage_changed = new_stage and new_stage != project_info['stage']
         status_changed = new_status and new_status != project_info['status']
         with_client_changed = new_with_client is not None and new_with_client != project_info['withClient']
         
-        if stage_changed or status_changed or with_client_changed:
+        if status_changed or with_client_changed:
             print(f"[update] Updating project...")
             airtable.update_project(
                 job_record_id,
-                stage=new_stage if stage_changed else None,
                 status=new_status if status_changed else None,
                 with_client=new_with_client if with_client_changed else None
             )
@@ -266,13 +270,10 @@ Current job data:
         teams_subject = teams_message.get('subject', f'UPDATE: {job_number}')
         teams_body = teams_message.get('body', update_summary)
         
-        context_preview = email_body[:300] + '...' if len(email_body) > 300 else email_body
-        teams_body_with_context = f"{teams_body}\n\n---\n**Original email:**\n>{context_preview}"
-        
         print(f"[update] Posting to Teams...")
         teams_result = connect.post_to_teams(
             team_id=team_id, channel_id=channel_id,
-            subject=teams_subject, body=teams_body_with_context, job_number=job_number
+            subject=teams_subject, body=teams_body, job_number=job_number
         )
         results['teams'] = teams_result
         print(f"[update] Teams: {teams_result.get('success')}")
@@ -313,7 +314,7 @@ Current job data:
             'projectName': project_info['projectName'],
             'update': update_summary,
             'updateDue': update_due,
-            'stage': new_stage,
+            'direction': analysis.get('direction'),
             'status': new_status,
             'withClient': new_with_client,
             'results': results,
