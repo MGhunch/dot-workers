@@ -292,25 +292,26 @@ def get_project(job_number):
         return None, None, f"Error looking up job: {str(e)}"
 
 
-def create_project(job_number, job_name, client_code, description=None,
+def create_project(job_number, job_name, client_name, description=None,
                    owner=None, stage='Triage', status='Incoming',
-                   update_due=None, live_date=None, ballpark=None):
+                   update_due=None, live_date=None):
     """
     Create a new project record.
     
     Args:
         job_number: e.g., 'LAB 056'
         job_name: e.g., 'Election Campaign'
-        client_code: e.g., 'LAB'
+        client_name: e.g., 'One NZ – Simplification' (text field, not linked)
         description: job description/brief summary
         owner: client contact name
         stage: default 'Triage'
         status: default 'Incoming'
         update_due: ISO date string
         live_date: month string (e.g., 'Feb', 'Tbc')
-        ballpark: budget string (e.g., '$5,000')
     
     Returns tuple: (record_id, error)
+    
+    Note: Budget/costs go to the Tracker table, not here.
     """
     if not AIRTABLE_API_KEY:
         return None, "Missing API key"
@@ -326,6 +327,10 @@ def create_project(job_number, job_name, client_code, description=None,
             'Status': status,
         }
         
+        # Client is a text field
+        if client_name:
+            fields['Client'] = client_name
+        
         # Optional fields
         if description:
             fields['Description'] = description
@@ -335,10 +340,9 @@ def create_project(job_number, job_name, client_code, description=None,
             fields['Update Due'] = update_due
         if live_date:
             fields['Live'] = live_date
-        if ballpark:
-            fields['Ballpark'] = ballpark
         
         print(f"[airtable] Creating project: {job_number} - {job_name}")
+        print(f"[airtable] Fields: {list(fields.keys())}")
         
         response = httpx.post(
             _url(PROJECTS_TABLE),
@@ -397,7 +401,7 @@ def update_project(job_record_id, stage=None, status=None, with_client=None):
 # ===================
 
 def create_tracker(project_record_id, spend=None, spend_type='Project budget',
-                   month=None, quarter=None, notes=None):
+                   month=None, quarter=None, notes=None, ballpark=False):
     """
     Create a new tracker record linked to a project.
     
@@ -410,6 +414,7 @@ def create_tracker(project_record_id, spend=None, spend_type='Project budget',
         month: e.g., 'January' (defaults to current month)
         quarter: e.g., 'Jan-Mar' (defaults to current quarter)
         notes: tracker notes
+        ballpark: boolean - True if spend is an estimate (checkbox field)
     
     Returns tuple: (record_id, error)
     """
@@ -443,6 +448,10 @@ def create_tracker(project_record_id, spend=None, spend_type='Project budget',
             if spend:
                 fields['Spend'] = f"${spend:,}"  # Format as "$5,000"
                 fields['This month'] = spend  # Numeric field
+        
+        # Ballpark is a checkbox - True if this is an estimate
+        if ballpark:
+            fields['Ballpark'] = True
         
         if notes:
             fields['Tracker notes'] = notes
