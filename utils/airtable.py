@@ -292,7 +292,7 @@ def get_project(job_number):
         return None, None, f"Error looking up job: {str(e)}"
 
 
-def create_project(job_number, job_name, client_name, description=None,
+def create_project(job_number, job_name, description=None,
                    owner=None, stage='Triage', status='Incoming',
                    update_due=None, live_date=None):
     """
@@ -301,7 +301,6 @@ def create_project(job_number, job_name, client_name, description=None,
     Args:
         job_number: e.g., 'LAB 056'
         job_name: e.g., 'Election Campaign'
-        client_name: e.g., 'One NZ – Simplification' (text field, not linked)
         description: job description/brief summary
         owner: client contact name
         stage: default 'Triage'
@@ -311,7 +310,8 @@ def create_project(job_number, job_name, client_name, description=None,
     
     Returns tuple: (record_id, error)
     
-    Note: Budget/costs go to the Tracker table, not here.
+    Note: Client field is a formula (auto-populated from Job Number).
+          Budget/costs go to the Tracker table, not here.
     """
     if not AIRTABLE_API_KEY:
         return None, "Missing API key"
@@ -327,9 +327,7 @@ def create_project(job_number, job_name, client_name, description=None,
             'Status': status,
         }
         
-        # Client is a text field
-        if client_name:
-            fields['Client'] = client_name
+        # Note: Client field is a formula - don't write to it
         
         # Optional fields
         if description:
