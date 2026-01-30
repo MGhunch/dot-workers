@@ -97,14 +97,11 @@ def _format_teams_brief(job_number, job_name, brief, update_due=None, update_url
     
     parts.append(f"<b>When?</b><br>Next update due: {due_text}<br>Live in: {when or 'TBC'}")
     
-    # Links
-    links = []
+    # Links (each on its own line)
     if update_url:
-        links.append(f'<a href="{update_url}">Update the project here</a>')
+        parts.append(f'<a href="{update_url}">Make an update</a>')
     if files_url:
-        links.append(f'<a href="{files_url}">See files here</a>')
-    if links:
-        parts.append(" | ".join(links))
+        parts.append(f'<a href="{files_url}">See the files</a>')
     
     return "<br><br>".join(parts)
 
@@ -170,6 +167,7 @@ def process_setup(data):
             # Hub form - brief provided directly
             print(f"[setup] Using provided brief from Hub form")
             brief = provided_brief
+            email_body = None  # No email body for Hub submissions
         else:
             # Email - fetch and extract with Claude
             print(f"[setup] Looking up email body...")
@@ -349,7 +347,7 @@ Subject: {subject_line}
             if sharepoint_url:
                 files_url = f"{sharepoint_url}/Shared Documents/{job_number} - {job_name}"
             
-            teams_subject = f"New job: {job_number} - {job_name}"
+            teams_subject = f"{job_number} - {job_name}"
             teams_body = _format_teams_brief(
                 job_number, 
                 job_name, 
