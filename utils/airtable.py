@@ -444,8 +444,7 @@ def create_tracker(project_record_id, spend=None, spend_type='Project budget',
                     spend = None
             
             if spend:
-                fields['Spend'] = f"${spend:,}"  # Format as "$5,000"
-                fields['This month'] = spend  # Numeric field
+                fields['Spend'] = spend  # Send raw number, Airtable formats it
         
         # Ballpark is a checkbox - True if this is an estimate
         if ballpark:
