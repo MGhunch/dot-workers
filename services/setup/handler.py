@@ -380,8 +380,9 @@ Subject: {subject_line}
             'content': email_body
         }
         
-        # Get channel URL for the email
+        # Get channel URL and files URL for the email
         channel_url = results.get('channel', {}).get('channelUrl')
+        files_url = results.get('channel', {}).get('filesUrl')
         
         email_result = connect.send_setup_confirmation(
             to_email=sender_email,
@@ -389,8 +390,10 @@ Subject: {subject_line}
             job_number=job_number,
             job_name=job_name,
             channel_url=channel_url,
+            files_url=files_url,
             subject_line=subject_line,
             original_email=original_email,
+            brief=brief,
             results=results
         )
         results['email'] = email_result
