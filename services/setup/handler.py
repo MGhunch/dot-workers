@@ -68,54 +68,45 @@ def _get_working_days_from_today(days=5):
 def _format_teams_brief(job_number, job_name, brief, update_due=None, update_url=None, files_url=None):
     """
     Format the brief for Teams posting.
-    Uses the extracted brief fields, shows TBC for missing items.
+    Uses HTML formatting for Teams compatibility.
     """
-    lines = []
+    parts = []
     
     # What's the job?
     the_job = brief.get('theJob') or f"Set up {job_name}"
-    lines.append(f"**What's the job?**")
-    lines.append(the_job)
-    lines.append("")
+    parts.append(f"<b>What's the job?</b><br>{the_job}")
     
     # Who's owning it?
     owner = brief.get('owner')
-    lines.append(f"**Who's owning it?**")
-    lines.append(owner or "TBC")
-    lines.append("")
+    parts.append(f"<b>Who's owning it?</b><br>{owner or 'TBC'}")
     
     # Tracker
     costs = brief.get('costs')
-    lines.append(f"**Tracker:**")
-    lines.append(costs or "TBC")
-    lines.append("")
+    parts.append(f"<b>Tracker:</b><br>{costs or 'TBC'}")
     
     # When?
     when = brief.get('when')
-    lines.append(f"**When?**")
-    
-    # Format update due date nicely if present
+    due_text = "TBC"
     if update_due:
         try:
             from datetime import datetime
             due_date = datetime.strptime(update_due, '%Y-%m-%d')
-            due_formatted = due_date.strftime('%-d %b')  # e.g., "6 Feb"
+            due_text = due_date.strftime('%-d %b')  # e.g., "6 Feb"
         except:
-            due_formatted = update_due
-        lines.append(f"Next update due: {due_formatted}")
-    else:
-        lines.append("Next update due: TBC")
+            due_text = update_due
     
-    lines.append(f"Live in: {when or 'TBC'}")
-    lines.append("")
+    parts.append(f"<b>When?</b><br>Next update due: {due_text}<br>Live in: {when or 'TBC'}")
     
     # Links
+    links = []
     if update_url:
-        lines.append(f"[Update the project here]({update_url})")
+        links.append(f'<a href="{update_url}">Update the project here</a>')
     if files_url:
-        lines.append(f"[See files here]({files_url})")
+        links.append(f'<a href="{files_url}">See files here</a>')
+    if links:
+        parts.append(" | ".join(links))
     
-    return "\n".join(lines)
+    return "<br><br>".join(parts)
 
 
 # ===================
@@ -124,16 +115,19 @@ def _format_teams_brief(job_number, job_name, brief, update_due=None, update_url
 
 def process_setup(data):
     """
-    Set up a new job from an email brief.
+    Set up a new job from an email brief OR a Hub form submission.
     
-    1. Get email body from Traffic table
-    2. Claude extracts brief details
-    3. Reserve job number
-    4. Create Project record
-    5. Create Tracker record (costs go here)
-    6. Create Teams channel
-    7. Post brief to Teams
-    8. Send confirmation email
+    TWO ENTRY POINTS:
+    - Email: Has internetMessageId → fetch email, Claude extracts brief
+    - Hub form: Has brief directly → use it, skip Claude
+    
+    THEN SAME FLOW:
+    1. Reserve job number
+    2. Create Project record
+    3. Create Tracker record (costs go here)
+    4. Create Teams channel
+    5. Post brief to Teams
+    6. Send confirmation email
     """
     client_code = data.get('clientCode', '')
     client_name = data.get('clientName', '')
@@ -141,10 +135,12 @@ def process_setup(data):
     sender_email = data.get('senderEmail', '')
     sender_name = data.get('senderName', '')
     subject_line = data.get('subjectLine', '')
+    provided_brief = data.get('brief')  # Hub form provides this directly
     
     print(f"[setup] === PROCESSING ===")
     print(f"[setup] Client: {client_code} ({client_name})")
     print(f"[setup] Sender: {sender_email}")
+    print(f"[setup] Mode: {'Hub form' if provided_brief else 'Email'}")
     
     # Track results for each step
     results = {
@@ -162,51 +158,56 @@ def process_setup(data):
     if not client_code:
         return jsonify({'success': False, 'error': 'No client code provided'}), 400
     
-    if not internet_message_id:
-        return jsonify({'success': False, 'error': 'No internetMessageId provided'}), 400
+    # Need either internetMessageId (email) or brief (Hub form)
+    if not internet_message_id and not provided_brief:
+        return jsonify({'success': False, 'error': 'No internetMessageId or brief provided'}), 400
     
     try:
         # ===================
-        # 1. GET EMAIL BODY
+        # GET BRIEF (two paths)
         # ===================
-        print(f"[setup] Looking up email body...")
-        email_body = airtable.get_email_body(internet_message_id)
-        
-        if not email_body:
-            error_msg = 'Could not retrieve email body from Traffic table'
-            print(f"[setup] {error_msg}")
-            connect.send_failure(
-                to_email=sender_email, route='setup', error_message=error_msg,
-                sender_name=sender_name, subject_line=subject_line
-            )
-            return jsonify({'success': False, 'error': error_msg, 'results': results}), 400
-        
-        print(f"[setup] Email body: {len(email_body)} chars")
-        
-        # ===================
-        # 2. CLAUDE EXTRACTS BRIEF
-        # ===================
-        print(f"[setup] Calling Claude to extract brief...")
-        
-        today = datetime.today()
-        context = f"""
+        if provided_brief:
+            # Hub form - brief provided directly
+            print(f"[setup] Using provided brief from Hub form")
+            brief = provided_brief
+        else:
+            # Email - fetch and extract with Claude
+            print(f"[setup] Looking up email body...")
+            email_body = airtable.get_email_body(internet_message_id)
+            
+            if not email_body:
+                error_msg = 'Could not retrieve email body from Traffic table'
+                print(f"[setup] {error_msg}")
+                connect.send_failure(
+                    to_email=sender_email, route='setup', error_message=error_msg,
+                    sender_name=sender_name, subject_line=subject_line
+                )
+                return jsonify({'success': False, 'error': error_msg, 'results': results}), 400
+            
+            print(f"[setup] Email body: {len(email_body)} chars")
+            
+            # Claude extracts brief
+            print(f"[setup] Calling Claude to extract brief...")
+            
+            today = datetime.today()
+            context = f"""
 Today's date: {today.strftime('%A, %d %B %Y')}
 Client: {client_code} ({client_name})
 Sender: {sender_name} <{sender_email}>
 Subject: {subject_line}
 """
-        
-        response = client.messages.create(
-            model='claude-sonnet-4-20250514',
-            max_tokens=2000,
-            temperature=0.2,
-            system=SETUP_PROMPT,
-            messages=[{'role': 'user', 'content': f'{context}\n\nEmail content:\n\n{email_body}'}]
-        )
-        
-        content = response.content[0].text
-        content = _strip_markdown_json(content)
-        brief = json.loads(content)
+            
+            response = client.messages.create(
+                model='claude-sonnet-4-20250514',
+                max_tokens=2000,
+                temperature=0.2,
+                system=SETUP_PROMPT,
+                messages=[{'role': 'user', 'content': f'{context}\n\nEmail content:\n\n{email_body}'}]
+            )
+            
+            content = response.content[0].text
+            content = _strip_markdown_json(content)
+            brief = json.loads(content)
         
         results['brief'] = brief
         
@@ -247,6 +248,8 @@ Subject: {subject_line}
         description = ' | '.join(description_parts) if description_parts else None
         
         # Note: costs/ballpark go to Tracker table, not Projects
+        live_date = brief.get('when') or 'Tbc'
+        
         project_record_id, project_error = airtable.create_project(
             job_number=job_number,
             job_name=job_name,
@@ -255,7 +258,7 @@ Subject: {subject_line}
             stage='Triage',
             status='Incoming',
             update_due=update_due,
-            live_date='Tbc'
+            live_date=live_date
         )
         
         if project_error:
