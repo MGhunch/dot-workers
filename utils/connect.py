@@ -262,12 +262,13 @@ def post_to_teams(team_id, channel_id, subject, body, job_number=None):
 
 def send_confirmation(to_email, route, sender_name=None, job_number=None, 
                       job_name=None, subject_line=None, original_email=None,
-                      files_url=None, results=None):
+                      files_url=None, channel_url=None, results=None):
     """
     Send confirmation email after successful action.
     
     If results dict is provided, shows a checklist of what happened.
-    If files_url is provided and files were filed, includes button to files.
+    Includes buttons for Teams channel and files if URLs provided.
+    Includes email trail at bottom after signature.
     """
     first_name = _get_first_name(sender_name)
     
@@ -281,47 +282,46 @@ def send_confirmation(to_email, route, sender_name=None, job_number=None,
     
     # Build checklist if we have results
     if results:
-        checklist_html, has_failure, button_html = _build_checklist(results, files_url)
+        checklist_html, has_failure, _ = _build_checklist(results, files_url)
         
         # Dynamic intro based on success/failure
         if has_failure:
             intro = "Mostly sorted, here's what I had."
         else:
             intro = "All sorted, here's what's done."
-        
-        # Build content with checklist box
-        content = f"""<p style="margin: 0 0 20px 0;">Hey {first_name},</p>
+    else:
+        checklist_html = ''
+        has_failure = False
+        intro = "All sorted."
+    
+    # Build buttons (Teams + Files)
+    buttons = []
+    if channel_url:
+        buttons.append(f'<a href="{channel_url}" style="display: inline-block; border: 2px solid #ED1C24; color: #ED1C24; text-decoration: none; padding: 8px 20px; border-radius: 50px; font-size: 14px; font-weight: 500;">› Open in Teams</a>')
+    if files_url:
+        buttons.append(f'<a href="{files_url}" style="display: inline-block; border: 2px solid #ED1C24; color: #ED1C24; text-decoration: none; padding: 8px 20px; border-radius: 50px; font-size: 14px; font-weight: 500;">› See the files</a>')
+    buttons_html = f'<div style="margin-top: 12px;">{" &nbsp; ".join(buttons)}</div>' if buttons else ''
+    
+    # Build email trail
+    trail_html = ''
+    if original_email and original_email.get('content'):
+        trail_html = f'''<div style="background: #f5f5f5; border-radius: 8px; padding: 12px; font-size: 13px; color: #666;">
+  <div style="font-weight: 600; margin-bottom: 8px; color: #333;">Original request</div>
+  {original_email['content'][:500]}{'...' if len(original_email.get('content', '')) > 500 else ''}
+</div>'''
+    
+    # Build content
+    content = f"""<p style="margin: 0 0 20px 0;">Hey {first_name},</p>
 <p style="margin: 0 0 12px 0;">{intro}</p>
 
 <div style="background: #f9f9f9; border-radius: 0 8px 8px 0; padding: 16px; margin-bottom: 20px; border-left: 4px solid #ED1C24;">
   <div style="font-weight: 600; color: #333; margin-bottom: 12px;">{box_title}</div>
   {checklist_html}
-  {button_html}
+  {buttons_html}
 </div>
 
-<p style="margin: 0;">Dot</p>"""
-    else:
-        # Fallback to old style if no results
-        friendly_text = {
-            'update': 'Job updated',
-            'file': 'Files filed',
-            'triage': 'Job triaged',
-            'newjob': 'New job created',
-        }.get(route, 'Request completed')
-        
-        subtitle = {
-            'update': 'Status updated',
-            'file': 'Filed to job folder',
-            'triage': 'New job created',
-            'newjob': 'Added to pipeline',
-        }.get(route, 'Completed')
-        
-        content = f"""<p style="margin: 0 0 20px 0;">Hey {first_name},</p>
-<p style="margin: 0 0 20px 0;">All sorted. {friendly_text}.</p>
-
-{_success_box(box_title, subtitle)}
-
-<p style="margin: 0;">Dot</p>"""
+<p style="margin: 0 0 20px 0;">Dot</p>
+{trail_html}"""
     
     body_html = _email_wrapper(content)
     subject = f"Re: {subject_line}" if subject_line else "Dot - Done"
@@ -362,12 +362,13 @@ def send_confirmation(to_email, route, sender_name=None, job_number=None,
 # ===================
 
 def send_setup_confirmation(to_email, sender_name=None, job_number=None,
-                            job_name=None, channel_url=None, subject_line=None,
-                            original_email=None, results=None):
+                            job_name=None, channel_url=None, files_url=None,
+                            subject_line=None, original_email=None, brief=None, results=None):
     """
     Send confirmation email after new job setup.
     
-    Shows what was created and provides link to Teams channel.
+    Shows what was created and provides links to Teams channel and files.
+    Includes brief summary or original email trail.
     """
     first_name = _get_first_name(sender_name)
     
@@ -383,8 +384,38 @@ def send_setup_confirmation(to_email, sender_name=None, job_number=None,
     else:
         intro = "All set up and ready to go."
     
-    # Channel button
-    button_html = _channel_button(channel_url) if channel_url else ''
+    # Build buttons (Teams + Files)
+    buttons = []
+    if channel_url:
+        buttons.append(f'<a href="{channel_url}" style="display: inline-block; border: 2px solid #ED1C24; color: #ED1C24; text-decoration: none; padding: 8px 20px; border-radius: 50px; font-size: 14px; font-weight: 500;">› Open in Teams</a>')
+    if files_url:
+        buttons.append(f'<a href="{files_url}" style="display: inline-block; border: 2px solid #ED1C24; color: #ED1C24; text-decoration: none; padding: 8px 20px; border-radius: 50px; font-size: 14px; font-weight: 500;">› See the files</a>')
+    buttons_html = f'<div style="margin-top: 12px;">{" &nbsp; ".join(buttons)}</div>' if buttons else ''
+    
+    # Build brief/request summary
+    trail_html = ''
+    if brief:
+        # Hub form submission - show brief details
+        brief_parts = []
+        if brief.get('theJob'):
+            brief_parts.append(f"<b>What's the job?</b> {brief['theJob']}")
+        if brief.get('owner'):
+            brief_parts.append(f"<b>Owner:</b> {brief['owner']}")
+        if brief.get('costs'):
+            brief_parts.append(f"<b>Tracker:</b> {brief['costs']}")
+        if brief.get('when'):
+            brief_parts.append(f"<b>Live:</b> {brief['when']}")
+        if brief_parts:
+            trail_html = f'''<div style="background: #f5f5f5; border-radius: 8px; padding: 12px; margin-top: 16px; font-size: 13px; color: #666;">
+  <div style="font-weight: 600; margin-bottom: 8px; color: #333;">Brief</div>
+  {'<br>'.join(brief_parts)}
+</div>'''
+    elif original_email and original_email.get('content'):
+        # Email submission - show original email
+        trail_html = f'''<div style="background: #f5f5f5; border-radius: 8px; padding: 12px; margin-top: 16px; font-size: 13px; color: #666;">
+  <div style="font-weight: 600; margin-bottom: 8px; color: #333;">Original request</div>
+  {original_email['content'][:500]}{'...' if len(original_email.get('content', '')) > 500 else ''}
+</div>'''
     
     content = f"""<p style="margin: 0 0 20px 0;">Hey {first_name},</p>
 <p style="margin: 0 0 12px 0;">{intro}</p>
@@ -392,10 +423,11 @@ def send_setup_confirmation(to_email, sender_name=None, job_number=None,
 <div style="background: #f9f9f9; border-radius: 0 8px 8px 0; padding: 16px; margin-bottom: 20px; border-left: 4px solid #ED1C24;">
   <div style="font-weight: 600; color: #333; margin-bottom: 12px;">{box_title}</div>
   {checklist_html}
-  {button_html}
+  {buttons_html}
 </div>
 
-<p style="margin: 0;">Dot</p>"""
+<p style="margin: 0 0 20px 0;">Dot</p>
+{trail_html}"""
     
     body_html = _email_wrapper(content)
     subject = f"Set up: {job_number} - {job_name}" if job_number else f"Re: {subject_line}"
