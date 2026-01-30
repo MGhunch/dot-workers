@@ -68,54 +68,45 @@ def _get_working_days_from_today(days=5):
 def _format_teams_brief(job_number, job_name, brief, update_due=None, update_url=None, files_url=None):
     """
     Format the brief for Teams posting.
-    Uses the extracted brief fields, shows TBC for missing items.
+    Uses HTML formatting for Teams compatibility.
     """
-    lines = []
+    parts = []
     
     # What's the job?
     the_job = brief.get('theJob') or f"Set up {job_name}"
-    lines.append(f"**What's the job?**")
-    lines.append(the_job)
-    lines.append("")
+    parts.append(f"<b>What's the job?</b><br>{the_job}")
     
     # Who's owning it?
     owner = brief.get('owner')
-    lines.append(f"**Who's owning it?**")
-    lines.append(owner or "TBC")
-    lines.append("")
+    parts.append(f"<b>Who's owning it?</b><br>{owner or 'TBC'}")
     
     # Tracker
     costs = brief.get('costs')
-    lines.append(f"**Tracker:**")
-    lines.append(costs or "TBC")
-    lines.append("")
+    parts.append(f"<b>Tracker:</b><br>{costs or 'TBC'}")
     
     # When?
     when = brief.get('when')
-    lines.append(f"**When?**")
-    
-    # Format update due date nicely if present
+    due_text = "TBC"
     if update_due:
         try:
             from datetime import datetime
             due_date = datetime.strptime(update_due, '%Y-%m-%d')
-            due_formatted = due_date.strftime('%-d %b')  # e.g., "6 Feb"
+            due_text = due_date.strftime('%-d %b')  # e.g., "6 Feb"
         except:
-            due_formatted = update_due
-        lines.append(f"Next update due: {due_formatted}")
-    else:
-        lines.append("Next update due: TBC")
+            due_text = update_due
     
-    lines.append(f"Live in: {when or 'TBC'}")
-    lines.append("")
+    parts.append(f"<b>When?</b><br>Next update due: {due_text}<br>Live in: {when or 'TBC'}")
     
     # Links
+    links = []
     if update_url:
-        lines.append(f"[Update the project here]({update_url})")
+        links.append(f'<a href="{update_url}">Update the project here</a>')
     if files_url:
-        lines.append(f"[See files here]({files_url})")
+        links.append(f'<a href="{files_url}">See files here</a>')
+    if links:
+        parts.append(" | ".join(links))
     
-    return "\n".join(lines)
+    return "<br><br>".join(parts)
 
 
 # ===================
@@ -246,7 +237,7 @@ Subject: {subject_line}
             description_parts.append(brief['what'])
         description = ' | '.join(description_parts) if description_parts else None
         
-        # Note: Client field is a formula (auto-populated from Job Number)
+        # Note: costs/ballpark go to Tracker table, not Projects
         project_record_id, project_error = airtable.create_project(
             job_number=job_number,
             job_name=job_name,
