@@ -250,7 +250,6 @@ Subject: {subject_line}
         project_record_id, project_error = airtable.create_project(
             job_number=job_number,
             job_name=job_name,
-            client_name=client_name,  # Text field for Client column
             description=description,
             owner=owner,
             stage='Triage',
