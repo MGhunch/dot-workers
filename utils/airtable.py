@@ -283,6 +283,8 @@ def get_project(job_number):
             'withClient': fields.get('With Client?', False),
             'currentUpdate': fields.get('Update', ''),
             'channelId': fields.get('Teams Channel ID', None),
+            'channelUrl': channel_url or None,
+            'filesUrl': fields.get('Files Url', None),
             'teamId': team_id
         }
         
@@ -430,6 +432,7 @@ def create_tracker(project_record_id, spend=None, spend_type='Project budget',
             'Link': [project_record_id],  # Linked record to Projects
             'Spend type': spend_type,
             'Month': month,
+            'Quarter': quarter,
         }
         
         # Handle spend - convert string to number if needed
@@ -453,7 +456,6 @@ def create_tracker(project_record_id, spend=None, spend_type='Project budget',
             fields['Tracker notes'] = notes
         
         print(f"[airtable] Creating tracker record for project: {project_record_id}")
-        print(f"[airtable] Tracker fields: {fields}")
         
         response = httpx.post(
             _url(TRACKER_TABLE),
