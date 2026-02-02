@@ -123,8 +123,8 @@ def process_update(data):
         if has_attachments and attachment_names:
             print(f"[update] Filing {len(attachment_names)} attachments...")
             
-            # Get email body early for .eml file
-            email_body_for_eml = airtable.get_email_body(internet_message_id)
+            # Get email body for .eml file - payload first, then Airtable
+            email_body_for_eml = data.get('emailContent') or airtable.get_email_body(internet_message_id)
             
             file_result = file.file_to_sharepoint(
                 job_number=job_number,
@@ -152,11 +152,11 @@ def process_update(data):
         # ===================
         # 2. GET EMAIL BODY
         # ===================
-        print(f"[update] Looking up email body...")
-        email_body = airtable.get_email_body(internet_message_id)
+        print(f"[update] Getting email body...")
+        email_body = data.get('emailContent') or airtable.get_email_body(internet_message_id)
         
         if not email_body:
-            error_msg = 'Could not retrieve email body from Traffic table'
+            error_msg = 'No email body in payload or Traffic table'
             print(f"[update] {error_msg}")
             connect.send_failure(
                 to_email=sender_email, route='update', error_message=error_msg,
