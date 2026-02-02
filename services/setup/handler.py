@@ -169,12 +169,12 @@ def process_setup(data):
             brief = provided_brief
             email_body = None  # No email body for Hub submissions
         else:
-            # Email - fetch and extract with Claude
-            print(f"[setup] Looking up email body...")
-            email_body = airtable.get_email_body(internet_message_id)
+            # Email - get body from payload first, fallback to Airtable
+            print(f"[setup] Getting email body...")
+            email_body = data.get('emailContent') or airtable.get_email_body(internet_message_id)
             
             if not email_body:
-                error_msg = 'Could not retrieve email body from Traffic table'
+                error_msg = 'No email body in payload or Traffic table'
                 print(f"[setup] {error_msg}")
                 connect.send_failure(
                     to_email=sender_email, route='setup', error_message=error_msg,
