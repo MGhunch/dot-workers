@@ -24,8 +24,8 @@ with open(HOROSCOPES_PATH, 'r') as f:
 
 VALID_SIGNS = list(HOROSCOPES.keys())
 
-INTRO = "Here's some spicy star stuff from the astrobot..."
-DISCLAIMER = "Some insights are recycled. But that's star signs, right?"
+INTRO = "Here's some spice from the Astrobot..."
+DISCLAIMER = "Astrobot is known to recycle some insights, but that's star signs, right?"
 
 
 # ===================
