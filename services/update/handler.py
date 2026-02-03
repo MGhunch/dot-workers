@@ -270,6 +270,10 @@ Current job data:
         teams_subject = teams_message.get('subject', f'UPDATE: {job_number}')
         teams_body = teams_message.get('body', update_summary)
         
+        # Append files link if available
+        if results['file'] and results['file'].get('success') and results['file'].get('folderUrl'):
+            teams_body += f"\n\nLink to files: {results['file'].get('folderUrl')}"
+        
         print(f"[update] Posting to Teams...")
         teams_result = connect.post_to_teams(
             team_id=team_id, channel_id=channel_id,
