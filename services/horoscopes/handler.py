@@ -1,6 +1,6 @@
 """
 Horoscopes Service
-Returns sassy horoscopes from Sass from the Stars.
+Returns sassy horoscopes from the Astrobot.
 
 GO IN → PICK SASS → GET OUT
 
@@ -24,7 +24,8 @@ with open(HOROSCOPES_PATH, 'r') as f:
 
 VALID_SIGNS = list(HOROSCOPES.keys())
 
-DISCLAIMER = "Some insights may be recycled. But... it's horoscopes, right?"
+INTRO = "Here's some spicy star stuff from the astrobot..."
+DISCLAIMER = "Some insights are recycled. But that's star signs, right?"
 
 
 # ===================
@@ -63,7 +64,7 @@ def get_horoscope(data):
         data: dict with 'sign' and optional 'mode' ('daily' or 'random')
     
     Returns:
-        Flask jsonify response with sign, horoscope, disclaimer
+        Flask jsonify response with intro, sign, horoscope, disclaimer
     """
     sign = data.get('sign', '').lower().strip()
     mode = data.get('mode', 'daily').lower()
@@ -97,6 +98,7 @@ def get_horoscope(data):
     
     return jsonify({
         'success': True,
+        'intro': INTRO,
         'sign': sign.capitalize(),
         'horoscope': horoscope,
         'disclaimer': DISCLAIMER
