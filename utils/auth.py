@@ -14,7 +14,7 @@ import base64
 
 TOKEN_SECRET = os.environ.get('TOKEN_SECRET', '')
 TOKEN_EXPIRY_DAYS = int(os.environ.get('TOKEN_EXPIRY_DAYS', '7'))
-HUB_URL = os.environ.get('HUB_URL', 'https://hub.hunch.co.nz')
+HUB_URL = os.environ.get('HUB_URL', 'https://dot.hunch.co.nz')
 
 
 # ===================
