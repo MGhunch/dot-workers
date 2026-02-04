@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 # ===================
 
 BRAND_RED = '#ED1C24'
+DARK_GREY = '#333'
 NZ_TZ = ZoneInfo('Pacific/Auckland')
 LOGO_URL = "https://raw.githubusercontent.com/MGhunch/dot-hub/main/images/ai2-logo.png"
 ASK_DOT_HEADER = "https://raw.githubusercontent.com/MGhunch/dot-hub/main/images/Askdot-header.png"
@@ -26,13 +27,13 @@ def _get_day_name():
 
 
 def _section_header(text):
-    """Build section header (TODAY, TOMORROW) - red and bold."""
-    return f'<div style="font-size: 20px; font-weight: 600; color: {BRAND_RED}; margin: 28px 0 16px 0;">{text}</div>'
+    """Build section header (TODAY, TOMORROW) - dark grey."""
+    return f'<div style="font-size: 20px; font-weight: 600; color: {DARK_GREY}; margin: 28px 0 16px 0;">{text}</div>'
 
 
 def _section_subtitle(text):
-    """Build section subtitle (MEETINGS, JOBS DUE)."""
-    return f'<div style="font-size: 13px; font-weight: 600; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin: 20px 0 10px 0;">{text}</div>'
+    """Build section subtitle (MEETINGS, JOBS DUE) - red."""
+    return f'<div style="font-size: 13px; font-weight: 600; color: {BRAND_RED}; text-transform: uppercase; letter-spacing: 0.5px; margin: 20px 0 10px 0;">{text}</div>'
 
 
 def _meeting_card(meeting):
@@ -43,7 +44,7 @@ def _meeting_card(meeting):
     
     return f'''<div style="background: #f9f9f9; border-radius: 12px; padding: 16px 18px; margin-bottom: 10px;">
   <div style="margin-bottom: 8px;">
-    <span style="font-size: 15px; font-weight: 600; color: {BRAND_RED};">{time_str}</span>
+    <span style="font-size: 15px; font-weight: 600; color: {DARK_GREY};">{time_str}</span>
     <span style="font-size: 11px; font-weight: 600; color: #666; background: #eee; padding: 4px 10px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 10px;">{meeting.get('whose', 'Michael')}</span>
   </div>
   <div style="font-weight: 600; font-size: 17px; color: #1a1a1a; margin-bottom: 4px;">{meeting.get('title', '')}</div>
@@ -92,13 +93,13 @@ def _week_item(job, hub_link):
 
 
 def _empty_state(text):
-    """Build empty state message."""
-    return f'<div style="background: #f9f9f9; border-radius: 12px; padding: 16px; text-align: center; color: #999; font-size: 14px;">{text}</div>'
+    """Build empty state message - left aligned."""
+    return f'<div style="background: #f9f9f9; border-radius: 12px; padding: 16px 18px; color: #999; font-size: 15px;">{text}</div>'
 
 
 def _header():
     """Build Ask Dot header with red underline."""
-    return f'''<div style="padding: 20px 0 16px 0; border-bottom: 3px solid {BRAND_RED}; margin-bottom: 24px;">
+    return f'''<div style="padding-bottom: 16px; border-bottom: 3px solid {BRAND_RED}; margin-bottom: 24px;">
   <img src="{ASK_DOT_HEADER}" alt="Ask Dot" height="32" style="display: block;">
 </div>'''
 
@@ -139,7 +140,7 @@ def build_todo_email(jobs, meetings, job_links, next_day_label='Tomorrow', first
     
     # === INTRO ===
     intro_html = f'''<p style="margin: 0 0 6px 0; font-size: 16px;">Hey {first_name},</p>
-<p style="margin: 0; font-size: 16px; color: #666;">Here's what's what and what's hot today.</p>'''
+<p style="margin: 0; font-size: 16px; color: #666;">Here's what's what and what's hot.</p>'''
     
     # === TODAY SECTION ===
     today_html = _section_header('Today')
@@ -196,7 +197,9 @@ def build_todo_email(jobs, meetings, job_links, next_day_label='Tomorrow', first
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.6; color: #333; margin: 0; padding: 20px;">
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; line-height: 1.6; color: #333; margin: 0; padding: 20px; background: #f5f5f5;">
+
+<div style="max-width: 600px; margin: 0 auto; background: white; padding: 24px; border-radius: 8px;">
 
 {_header()}
 {intro_html}
@@ -204,6 +207,8 @@ def build_todo_email(jobs, meetings, job_links, next_day_label='Tomorrow', first
 {tomorrow_html}
 {week_html}
 {_footer()}
+
+</div>
 
 </body>
 </html>'''
