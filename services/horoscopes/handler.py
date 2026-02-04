@@ -25,7 +25,6 @@ with open(HOROSCOPES_PATH, 'r') as f:
 VALID_SIGNS = list(HOROSCOPES.keys())
 
 INTRO = "Here's some spice from the Astrobot..."
-DISCLAIMER = "Astrobot is known to recycle some insights, but that's star signs, right?"
 
 
 # ===================
@@ -98,5 +97,5 @@ def get_horoscope(data):
     
     return jsonify({
         'success': True,
-        'message': f"{INTRO}\n\n{sign.capitalize()}\n{horoscope}\n\n{DISCLAIMER}"
+        'message': f"{INTRO}\n\n{sign.capitalize()}\n{horoscope}"
     })
