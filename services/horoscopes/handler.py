@@ -98,8 +98,5 @@ def get_horoscope(data):
     
     return jsonify({
         'success': True,
-        'intro': INTRO,
-        'sign': sign.capitalize(),
-        'horoscope': horoscope,
-        'disclaimer': DISCLAIMER
+        'message': f"{INTRO}\n\n**{sign.capitalize()}:** {horoscope}\n\n{DISCLAIMER}"
     })
