@@ -546,18 +546,26 @@ def get_next_workday():
 
 def get_end_of_week():
     """
-    Get end of current work week (Friday).
-    Returns: date
+    Get end of work week for "coming up" section.
+    
+    Mon-Wed: returns this Friday
+    Thu-Fri: returns NEXT Friday (so we show "Coming up next week")
+    Sat-Sun: returns next Friday
+    
+    Returns: (date, label)
     """
     today = get_nz_today()
     weekday = today.weekday()  # Mon=0, Sun=6
     
-    if weekday <= 4:  # Mon-Fri
+    if weekday <= 2:  # Mon-Wed: this Friday
         days_until_friday = 4 - weekday
-        return today + timedelta(days=days_until_friday)
-    else:  # Sat-Sun, return next Friday
+        return today + timedelta(days=days_until_friday), 'Coming up this week'
+    elif weekday <= 4:  # Thu-Fri: next Friday
+        days_until_next_friday = 11 - weekday
+        return today + timedelta(days=days_until_next_friday), 'Coming up next week'
+    else:  # Sat-Sun: next Friday
         days_until_friday = 11 - weekday
-        return today + timedelta(days=days_until_friday)
+        return today + timedelta(days=days_until_friday), 'Coming up next week'
 
 
 def parse_meeting_datetime(dt_str):
@@ -623,19 +631,20 @@ def get_todo_jobs():
     Returns: {
         'today': [...],      # Overdue + due today
         'tomorrow': [...],   # Due tomorrow (or Monday if Friday)
-        'week': [...]        # Rest of week (after tomorrow, up to Friday)
+        'week': [...],       # Rest of week (after tomorrow, up to end date)
+        'week_label': '...'  # "Coming up this week" or "Coming up next week"
     }
     
     Excludes jobs where With Client? = True
     """
     if not AIRTABLE_API_KEY:
         print("[airtable] Missing API key")
-        return {'today': [], 'tomorrow': [], 'week': []}
+        return {'today': [], 'tomorrow': [], 'week': [], 'week_label': ''}
     
     try:
         today = get_nz_today()
         next_day, _ = get_next_workday()
-        end_of_week = get_end_of_week()
+        end_of_week, week_label = get_end_of_week()
         
         # Fetch active jobs with Update Due set
         params = {
@@ -683,7 +692,7 @@ def get_todo_jobs():
                 job['status'] = 'Due tomorrow'
                 tomorrow_jobs.append(job)
             elif update_due <= end_of_week:
-                job['status'] = update_due.strftime('%a')  # "Fri"
+                job['status'] = update_due.strftime('%a')  # "Fri", "Mon", etc.
                 week_jobs.append(job)
         
         # Sort by due date
@@ -692,11 +701,11 @@ def get_todo_jobs():
         week_jobs.sort(key=lambda x: x.get('updateDue', ''))
         
         print(f"[airtable] TO DO jobs: {len(today_jobs)} today, {len(tomorrow_jobs)} tomorrow, {len(week_jobs)} week")
-        return {'today': today_jobs, 'tomorrow': tomorrow_jobs, 'week': week_jobs}
+        return {'today': today_jobs, 'tomorrow': tomorrow_jobs, 'week': week_jobs, 'week_label': week_label}
     
     except Exception as e:
         print(f"[airtable] Error fetching todo jobs: {e}")
-        return {'today': [], 'tomorrow': [], 'week': []}
+        return {'today': [], 'tomorrow': [], 'week': [], 'week_label': ''}
 
 
 def get_meetings():
