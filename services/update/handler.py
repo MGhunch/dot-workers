@@ -248,20 +248,21 @@ Current job data:
         results['airtable'] = {'success': True, 'recordId': update_record_id}
         print(f"[update] Written: {update_record_id}")
         
-        # Update project if changed
+        # Update project record with update text + any status changes
         new_status = analysis.get('status')
         new_with_client = analysis.get('withClient')
         
         status_changed = new_status and new_status != project_info['status']
         with_client_changed = new_with_client is not None and new_with_client != project_info['withClient']
         
-        if status_changed or with_client_changed:
-            print(f"[update] Updating project...")
-            airtable.update_project(
-                job_record_id,
-                status=new_status if status_changed else None,
-                with_client=new_with_client if with_client_changed else None
-            )
+        print(f"[update] Updating project...")
+        airtable.update_project(
+            job_record_id,
+            update=update_summary,
+            update_due=update_due,
+            status=new_status if status_changed else None,
+            with_client=new_with_client if with_client_changed else None
+        )
         
         # ===================
         # 6. POST TO TEAMS
