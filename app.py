@@ -24,7 +24,7 @@ def health():
     return jsonify({
         'status': 'healthy',
         'service': 'Dot Workers',
-        'endpoints': ['/update', '/horoscope', '/setup']
+        'endpoints': ['/update', '/horoscope', '/setup', '/file']
     })
 
 
@@ -62,6 +62,18 @@ def setup():
     from services.setup.handler import process_setup
     data = request.get_json()
     return process_setup(data)
+
+
+# ===================
+# FILE SERVICE
+# ===================
+
+@app.route('/file', methods=['POST'])
+def file_attachments():
+    """File attachments to SharePoint job folder"""
+    from services.file.handler import process_file
+    data = request.get_json()
+    return process_file(data)
 
 
 # ===================
