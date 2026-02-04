@@ -24,7 +24,7 @@ def health():
     return jsonify({
         'status': 'healthy',
         'service': 'Dot Workers',
-        'endpoints': ['/update', '/horoscope', '/setup', '/file']
+        'endpoints': ['/update', '/horoscope', '/setup', '/file', '/todo/email']
     })
 
 
@@ -74,6 +74,17 @@ def file_attachments():
     from services.file.handler import process_file
     data = request.get_json()
     return process_file(data)
+
+
+# ===================
+# TO DO EMAIL SERVICE
+# ===================
+
+@app.route('/todo/email', methods=['GET'])
+def todo_email():
+    """Send daily TO DO email with jobs + meetings"""
+    from services.todo.handler import send_todo_email
+    return send_todo_email()
 
 
 # ===================
