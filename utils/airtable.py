@@ -4,8 +4,10 @@ Shared data lookups for all workers.
 """
 
 import os
+import re
 import httpx
-from datetime import datetime
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 # ===================
 # CONFIG
@@ -19,8 +21,10 @@ PROJECTS_TABLE = 'Projects'
 UPDATES_TABLE = 'Updates'
 CLIENTS_TABLE = 'Clients'
 TRACKER_TABLE = 'Tracker'
+MEETINGS_TABLE = 'Meetings'
 
 TIMEOUT = 10.0
+NZ_TZ = ZoneInfo('Pacific/Auckland')
 
 
 def _headers():
@@ -511,3 +515,249 @@ def write_update(job_record_id, update_text, update_due=None):
         
     except Exception as e:
         return None, f"Error writing update: {str(e)}"
+
+
+# ===================
+# DATE HELPERS (NZ)
+# ===================
+
+def get_nz_today():
+    """Get today's date in NZ timezone."""
+    return datetime.now(NZ_TZ).date()
+
+
+def get_next_workday():
+    """
+    Get next working day. Mon-Thu: tomorrow. Fri-Sun: Monday.
+    Returns: (date, label)
+    """
+    today = get_nz_today()
+    weekday = today.weekday()  # Mon=0, Sun=6
+    
+    if weekday == 4:  # Friday
+        return today + timedelta(days=3), 'Monday'
+    elif weekday == 5:  # Saturday
+        return today + timedelta(days=2), 'Monday'
+    elif weekday == 6:  # Sunday
+        return today + timedelta(days=1), 'Monday'
+    else:
+        return today + timedelta(days=1), 'Tomorrow'
+
+
+def get_end_of_week():
+    """
+    Get end of current work week (Friday).
+    Returns: date
+    """
+    today = get_nz_today()
+    weekday = today.weekday()  # Mon=0, Sun=6
+    
+    if weekday <= 4:  # Mon-Fri
+        days_until_friday = 4 - weekday
+        return today + timedelta(days=days_until_friday)
+    else:  # Sat-Sun, return next Friday
+        days_until_friday = 11 - weekday
+        return today + timedelta(days=days_until_friday)
+
+
+def parse_meeting_datetime(dt_str):
+    """
+    Parse meeting datetime from Airtable API (UTC) and convert to NZ time.
+    Returns: (date, time_str) or (None, '')
+    """
+    if not dt_str:
+        return None, ''
+    
+    # ISO format from API: "2026-02-02T00:00:00.000Z"
+    iso_match = re.match(r'(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})', dt_str)
+    if iso_match:
+        y, mo, d = int(iso_match.group(1)), int(iso_match.group(2)), int(iso_match.group(3))
+        h, mi = int(iso_match.group(4)), int(iso_match.group(5))
+        utc_dt = datetime(y, mo, d, h, mi, tzinfo=ZoneInfo('UTC'))
+        nz_dt = utc_dt.astimezone(NZ_TZ)
+        period = 'am' if nz_dt.hour < 12 else 'pm'
+        display_h = nz_dt.hour % 12 or 12
+        return nz_dt.date(), f"{display_h}:{nz_dt.minute:02d}{period}"
+    
+    return None, ''
+
+
+def parse_airtable_date(date_str):
+    """
+    Parse Airtable date field into date object.
+    Handles: ISO "2026-01-31", D/M/YYYY "31/1/2026"
+    """
+    if not date_str or str(date_str).upper() == 'TBC':
+        return None
+    
+    date_str = str(date_str).strip()
+    
+    # ISO format (YYYY-MM-DD)
+    iso_match = re.search(r'^(\d{4})-(\d{2})-(\d{2})', date_str)
+    if iso_match:
+        try:
+            return datetime.strptime(iso_match.group(0), '%Y-%m-%d').date()
+        except ValueError:
+            return None
+    
+    # D/M/YYYY format
+    dmy_match = re.search(r'(\d{1,2})/(\d{1,2})/(\d{4})', date_str)
+    if dmy_match:
+        day, month, year = int(dmy_match.group(1)), int(dmy_match.group(2)), int(dmy_match.group(3))
+        try:
+            return datetime(year, month, day).date()
+        except ValueError:
+            return None
+    
+    return None
+
+
+# ===================
+# TO DO DATA
+# ===================
+
+def get_todo_jobs():
+    """
+    Get jobs due for TO DO email.
+    
+    Returns: {
+        'today': [...],      # Overdue + due today
+        'tomorrow': [...],   # Due tomorrow (or Monday if Friday)
+        'week': [...]        # Rest of week (after tomorrow, up to Friday)
+    }
+    
+    Excludes jobs where With Client? = True
+    """
+    if not AIRTABLE_API_KEY:
+        print("[airtable] Missing API key")
+        return {'today': [], 'tomorrow': [], 'week': []}
+    
+    try:
+        today = get_nz_today()
+        next_day, _ = get_next_workday()
+        end_of_week = get_end_of_week()
+        
+        # Fetch active jobs with Update Due set
+        params = {
+            'filterByFormula': "AND(OR({Status}='In Progress', {Status}='Incoming'), {Update Due}!='')"
+        }
+        
+        response = httpx.get(
+            _url(PROJECTS_TABLE),
+            headers=_headers(),
+            params=params,
+            timeout=TIMEOUT
+        )
+        response.raise_for_status()
+        
+        today_jobs = []
+        tomorrow_jobs = []
+        week_jobs = []
+        
+        for record in response.json().get('records', []):
+            fields = record.get('fields', {})
+            
+            # Skip if with client
+            if fields.get('With Client?', False):
+                continue
+            
+            # Parse update due date
+            update_due = parse_airtable_date(fields.get('Update Due', ''))
+            if not update_due:
+                continue
+            
+            job = {
+                'jobNumber': fields.get('Job Number', ''),
+                'jobName': fields.get('Project Name', ''),
+                'description': fields.get('Description', ''),
+                'updateDue': update_due.isoformat(),
+                'channelUrl': fields.get('Channel Url', ''),
+                'projectOwner': fields.get('Project Owner', ''),
+            }
+            
+            # Categorize by due date
+            if update_due <= today:
+                job['status'] = 'Overdue' if update_due < today else 'Due today'
+                today_jobs.append(job)
+            elif update_due == next_day:
+                job['status'] = 'Due tomorrow'
+                tomorrow_jobs.append(job)
+            elif update_due <= end_of_week:
+                job['status'] = update_due.strftime('%a')  # "Fri"
+                week_jobs.append(job)
+        
+        # Sort by due date
+        today_jobs.sort(key=lambda x: x.get('updateDue', ''))
+        tomorrow_jobs.sort(key=lambda x: x.get('updateDue', ''))
+        week_jobs.sort(key=lambda x: x.get('updateDue', ''))
+        
+        print(f"[airtable] TO DO jobs: {len(today_jobs)} today, {len(tomorrow_jobs)} tomorrow, {len(week_jobs)} week")
+        return {'today': today_jobs, 'tomorrow': tomorrow_jobs, 'week': week_jobs}
+    
+    except Exception as e:
+        print(f"[airtable] Error fetching todo jobs: {e}")
+        return {'today': [], 'tomorrow': [], 'week': []}
+
+
+def get_meetings():
+    """
+    Get meetings for today and next workday.
+    
+    Returns: {
+        'today': [...],
+        'tomorrow': [...]
+    }
+    """
+    if not AIRTABLE_API_KEY:
+        print("[airtable] Missing API key")
+        return {'today': [], 'tomorrow': []}
+    
+    try:
+        today_date = get_nz_today()
+        next_day, _ = get_next_workday()
+        
+        response = httpx.get(
+            _url(MEETINGS_TABLE),
+            headers=_headers(),
+            timeout=TIMEOUT
+        )
+        response.raise_for_status()
+        
+        today_meetings = []
+        tomorrow_meetings = []
+        
+        for record in response.json().get('records', []):
+            fields = record.get('fields', {})
+            
+            start_str = fields.get('Start', '')
+            end_str = fields.get('End', '')
+            meeting_date, start_time = parse_meeting_datetime(start_str)
+            _, end_time = parse_meeting_datetime(end_str)
+            
+            if not meeting_date:
+                continue
+            
+            meeting = {
+                'id': record.get('id'),
+                'title': fields.get('Title', ''),
+                'startTime': start_time,
+                'endTime': end_time,
+                'location': fields.get('Location', ''),
+                'whose': fields.get('Whose meeting', '') or 'Michael',
+            }
+            
+            if meeting_date == today_date:
+                today_meetings.append(meeting)
+            elif meeting_date == next_day:
+                tomorrow_meetings.append(meeting)
+        
+        # Sort by start time
+        today_meetings.sort(key=lambda x: x.get('startTime', ''))
+        tomorrow_meetings.sort(key=lambda x: x.get('startTime', ''))
+        
+        print(f"[airtable] Meetings: {len(today_meetings)} today, {len(tomorrow_meetings)} tomorrow")
+        return {'today': today_meetings, 'tomorrow': tomorrow_meetings}
+    
+    except Exception as e:
+        print(f"[airtable] Error fetching meetings: {e}")
+        return {'today': [], 'tomorrow': []}
