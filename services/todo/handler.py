@@ -13,7 +13,7 @@ from flask import jsonify
 from utils.airtable import get_todo_jobs, get_meetings, get_next_workday
 from utils.auth import generate_job_link
 from utils.connect import PA_POSTMAN_URL, TIMEOUT
-from .email import build_todo_email
+from .email import build_todo_email, get_subject_line
 
 import httpx
 
@@ -92,7 +92,9 @@ def send_todo_email(data=None):
         jobs=jobs,
         meetings=meetings,
         job_links=job_links,
-        next_day_label=next_day_label
+        next_day_label=next_day_label,
+        first_name=DEFAULT_FIRST_NAME,
+        week_label=jobs.get('week_label', 'Coming up this week')
     )
     
     # 5. Send via Postman
@@ -107,7 +109,7 @@ def send_todo_email(data=None):
     
     payload = {
         'to': DEFAULT_RECIPIENT,
-        'subject': 'TO DO',
+        'subject': get_subject_line(),
         'body': email_html
     }
     
