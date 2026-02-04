@@ -58,7 +58,7 @@ def generate_job_link(job_number, email, client_code='ALL', first_name='User', a
         email, client_code, first_name, access_level: for token
     
     Returns:
-        Full URL: https://hub.hunch.co.nz/job/SKY018?t=<token>
+        Full URL: https://dot.hunch.co.nz/job/SKY018?t=<token>
     """
     token = generate_token(email, client_code, first_name, access_level)
     
