@@ -256,13 +256,17 @@ Current job data:
         with_client_changed = new_with_client is not None and new_with_client != project_info['withClient']
         
         print(f"[update] Updating project...")
-        airtable.update_project(
+        project_success, project_error = airtable.update_project(
             job_record_id,
             update=update_summary,
             update_due=update_due,
             status=new_status if status_changed else None,
             with_client=new_with_client if with_client_changed else None
         )
+        
+        if project_error:
+            print(f"[update] Project patch failed: {project_error}")
+            # Don't fail the whole update — the Updates record is already saved
         
         # ===================
         # 6. POST TO TEAMS
