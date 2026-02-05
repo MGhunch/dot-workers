@@ -366,26 +366,54 @@ def create_project(job_number, job_name, description=None,
         return None, f"Error creating project: {str(e)}"
 
 
-def update_project(job_record_id, stage=None, status=None, with_client=None):
+# Map of python kwarg names → Airtable field names
+# Add new fields here as needed — unknown kwargs are silently skipped
+PROJECT_FIELD_MAP = {
+    'update': 'Update',
+    'update_due': 'Update Due',
+    'status': 'Status',
+    'stage': 'Stage',
+    'with_client': 'With Client?',
+    'round': 'Round',
+    'description': 'Description',
+    'the_story': 'The Story',
+    'live': 'Live',
+    'project_owner': 'Project Owner',
+    'project_name': 'Project Name',
+    'teams_channel_id': 'Teams Channel ID',
+    'channel_url': 'Channel Url',
+    'files_url': 'Files Url',
+    'update_history': 'Update History',
+}
+
+# Values to treat as "no real value"
+_SKIP_VALUES = {'Unknown', 'unknown', '', None}
+
+
+def update_project(job_record_id, **kwargs):
     """
-    Update a project's stage/status/withClient.
+    Update a project record.
+    Pass any known fields as kwargs — unknown keys are silently skipped.
     Returns tuple: (success, error)
     """
     if not AIRTABLE_API_KEY or not job_record_id:
         return False, "Missing API key or job record ID"
-    
+
     try:
         fields = {}
-        if stage and stage != 'Unknown':
-            fields['Stage'] = stage
-        if status and status != 'Unknown':
-            fields['Status'] = status
-        if with_client is not None:
-            fields['With Client?'] = with_client
-        
+        for key, value in kwargs.items():
+            airtable_field = PROJECT_FIELD_MAP.get(key)
+            if not airtable_field:
+                print(f"[airtable] update_project: skipping unknown field '{key}'")
+                continue
+            # Skip empty/unknown values (but allow False for checkboxes)
+            if value in _SKIP_VALUES and value is not False:
+                continue
+            fields[airtable_field] = value
+
         if not fields:
             return True, None
-        
+
         response = httpx.patch(
             f"{_url(PROJECTS_TABLE)}/{job_record_id}",
             headers=_headers(),
@@ -393,9 +421,9 @@ def update_project(job_record_id, stage=None, status=None, with_client=None):
             timeout=TIMEOUT
         )
         response.raise_for_status()
-        
+
         return True, None
-        
+
     except Exception as e:
         return False, f"Error updating project: {str(e)}"
 
