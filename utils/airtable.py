@@ -546,6 +546,106 @@ def write_update(job_record_id, update_text, update_due=None):
 
 
 # ===================
+# WIP EMAIL DATA
+# ===================
+
+def get_jobs_for_client(client_code):
+    """
+    Get active jobs for a client (for WIP email).
+    
+    Returns jobs grouped by section:
+    {
+        'with_hunch': [...],   # In Progress, not with client
+        'with_you': [...],     # With Client? = true
+        'on_hold': [...],      # On Hold
+        'upcoming': [...]      # Incoming
+    }
+    
+    Excludes: Always on, Completed
+    """
+    if not AIRTABLE_API_KEY or not client_code:
+        return {'with_hunch': [], 'with_you': [], 'on_hold': [], 'upcoming': []}
+    
+    try:
+        # Handle One NZ divisions
+        if client_code in ['ONE', 'ONB', 'ONS']:
+            filter_formula = "AND(OR({Status}='In Progress', {Status}='On Hold', {Status}='Incoming'), OR(FIND('ONE', {Job Number}), FIND('ONB', {Job Number}), FIND('ONS', {Job Number})))"
+        else:
+            filter_formula = f"AND(OR({{Status}}='In Progress', {{Status}}='On Hold', {{Status}}='Incoming'), FIND('{client_code}', {{Job Number}}))"
+        
+        params = {'filterByFormula': filter_formula}
+        all_records = []
+        offset = None
+        
+        while True:
+            if offset:
+                params['offset'] = offset
+            
+            response = httpx.get(
+                _url(PROJECTS_TABLE),
+                headers=_headers(),
+                params=params,
+                timeout=TIMEOUT
+            )
+            response.raise_for_status()
+            data = response.json()
+            all_records.extend(data.get('records', []))
+            
+            offset = data.get('offset')
+            if not offset:
+                break
+        
+        with_hunch = []
+        with_you = []
+        on_hold = []
+        upcoming = []
+        
+        for record in all_records:
+            fields = record.get('fields', {})
+            status = fields.get('Status', '')
+            
+            # Skip Always on
+            if status == 'Always on':
+                continue
+            
+            job = {
+                'jobNumber': fields.get('Job Number', ''),
+                'jobName': fields.get('Project Name', ''),
+                'description': fields.get('Description', ''),
+                'status': status,
+                'withClient': fields.get('With Client?', False),
+            }
+            
+            # Route to section
+            if status == 'On Hold':
+                on_hold.append(job)
+            elif status == 'Incoming':
+                upcoming.append(job)
+            elif job['withClient']:
+                with_you.append(job)
+            else:
+                with_hunch.append(job)
+        
+        # Sort each section by job number
+        for section in [with_hunch, with_you, on_hold, upcoming]:
+            section.sort(key=lambda x: x.get('jobNumber', ''))
+        
+        total = len(with_hunch) + len(with_you) + len(on_hold) + len(upcoming)
+        print(f"[airtable] WIP jobs for {client_code}: {total} total ({len(with_hunch)} hunch, {len(with_you)} client, {len(on_hold)} hold, {len(upcoming)} upcoming)")
+        
+        return {
+            'with_hunch': with_hunch,
+            'with_you': with_you,
+            'on_hold': on_hold,
+            'upcoming': upcoming
+        }
+    
+    except Exception as e:
+        print(f"[airtable] Error fetching WIP jobs: {e}")
+        return {'with_hunch': [], 'with_you': [], 'on_hold': [], 'upcoming': []}
+
+
+# ===================
 # DATE HELPERS (NZ)
 # ===================
 
