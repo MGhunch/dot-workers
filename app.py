@@ -24,7 +24,7 @@ def health():
     return jsonify({
         'status': 'healthy',
         'service': 'Dot Workers',
-        'endpoints': ['/update', '/horoscope', '/setup', '/file', '/todo/email']
+        'endpoints': ['/update', '/horoscope', '/setup', '/file', '/todo/email', '/wip/email']
     })
 
 
@@ -85,6 +85,18 @@ def todo_email():
     """Send daily TO DO email with jobs + meetings"""
     from services.todo.handler import send_todo_email
     return send_todo_email()
+
+
+# ===================
+# WIP EMAIL SERVICE
+# ===================
+
+@app.route('/wip/email', methods=['POST'])
+def wip_email():
+    """Send WIP email to client contacts"""
+    from services.wip_email.handler import send_wip_email
+    data = request.get_json()
+    return send_wip_email(data)
 
 
 # ===================
