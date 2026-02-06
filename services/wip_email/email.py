@@ -43,7 +43,7 @@ def _footer():
 
 def _section_header(text):
     """Build section header - dark grey, caps, letter-spacing 0.1."""
-    return f'<div style="font-size: 13px; font-weight: 600; color: {DARK_GREY}; text-transform: uppercase; letter-spacing: 0.1em; margin: 28px 0 12px 0;">{text}</div>'
+    return f'<div style="font-size: 13px; font-weight: 600; color: {BRAND_RED}; text-transform: uppercase; letter-spacing: 0.1em; margin: 28px 0 12px 0;">{text}</div>'
 
 
 def _job_card(job, hub_link):
@@ -55,14 +55,14 @@ def _job_card(job, hub_link):
     job_number = job.get('jobNumber', '')
     job_name = job.get('jobName', '')
 
-    return f'''<a href="{hub_link}" style="display: block; text-decoration: none; color: inherit; background: #f9f9f9; border-radius: 12px; padding: 16px 18px; margin-bottom: 10px;">
+    return f'''<a href="{hub_link}" style="display: block; text-decoration: none; color: inherit; background: #f9f9f9; border-radius: 12px; padding: 16px 18px; margin-bottom: 10px; border-left: 3px solid {BRAND_RED};">
   <div style="margin-bottom: 8px;">
     <span style="font-size: 15px; font-weight: 600; color: #1a1a1a;">{job_number}</span>
     <span style="color: #ccc; margin: 0 8px;">&middot;</span>
     <span style="font-size: 15px; font-weight: 600; color: #1a1a1a;">{job_name}</span>
   </div>
   <div style="font-size: 15px; color: #666; line-height: 1.4; margin-bottom: 8px;">{description}</div>
-  <div style="font-size: 13px; font-weight: 600; color: #999;">View details &rsaquo;</div>
+  <div style="font-size: 13px; font-weight: 600; color: {BRAND_RED};">View details &rsaquo;</div>
 </a>'''
 
 
@@ -89,8 +89,6 @@ def build_wip_email(jobs, job_links, first_name='there', custom_note=None):
 
     if custom_note:
         intro_html += f'<p style="margin: 0 0 16px 0; font-size: 16px; color: #333;">{custom_note}</p>'
-
-    intro_html += '<p style="margin: 0 0 4px 0; font-size: 16px; color: #666;">Here\'s what\'s new, what\'s due and what\'s cooking.</p>'
 
     # === SECTIONS ===
     sections_html = ''
