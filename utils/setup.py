@@ -6,7 +6,7 @@ Teams channel creation via PA Setupbot.
 import os
 import httpx
 
-from utils.airtable import _headers, _url, PROJECTS_TABLE, get_client_sharepoint
+from utils.airtable import _headers, _url, PROJECTS_TABLE
 
 PA_SETUPBOT_URL = os.environ.get('PA_SETUPBOT_URL', '')
 TIMEOUT = 30.0  # Channel creation might take a few seconds
@@ -16,6 +16,9 @@ def setup_teams_channel(team_id, job_number, job_name, record_id):
     """
     Create Teams channel for a job and save URLs to Airtable.
     
+    Note: Files Url is now handled by Dropbox folder creation in the setup handler.
+    This function only writes Teams Channel ID and Channel Url.
+    
     Args:
         team_id: Teams team ID (from Clients table)
         job_number: e.g., 'LAB 055'
@@ -23,7 +26,7 @@ def setup_teams_channel(team_id, job_number, job_name, record_id):
         record_id: Airtable Projects record ID
     
     Returns:
-        dict with success, channelId, channelUrl, filesUrl, error
+        dict with success, channelId, channelUrl, error
     """
     
     if not PA_SETUPBOT_URL:
@@ -37,17 +40,10 @@ def setup_teams_channel(team_id, job_number, job_name, record_id):
     # Build channel name: "LAB 055 - Campaign Refresh"
     channel_name = f"{job_number} - {job_name}"
     
-    # Extract client code from job number (e.g., "LAB" from "LAB 055")
-    client_code = job_number.split()[0] if job_number else None
-    
-    # Look up SharePoint URL for this client
-    sharepoint_url = get_client_sharepoint(client_code) if client_code else None
-    
     print(f'[setup] === SETUP TEAMS CHANNEL ===')
     print(f'[setup] Team ID: {team_id}')
     print(f'[setup] Channel name: {channel_name}')
     print(f'[setup] Record ID: {record_id}')
-    print(f'[setup] SharePoint URL: {sharepoint_url}')
     
     # ===================
     # CALL PA SETUPBOT
@@ -80,15 +76,6 @@ def setup_teams_channel(team_id, job_number, job_name, record_id):
         channel_id = result.get('channelId')
         channel_url = result.get('channelUrl')
         
-        # Construct Files URL from SharePoint site + channel name
-        # Pattern: {sharepointUrl}/Shared Documents/{channelName}
-        if sharepoint_url:
-            files_url = f"{sharepoint_url}/Shared Documents/{channel_name}"
-            print(f'[setup] Constructed Files URL: {files_url}')
-        else:
-            files_url = ''
-            print(f'[setup] No SharePoint URL for client {client_code}, Files URL will be empty')
-        
     except httpx.TimeoutException:
         print('[setup] PA request timed out')
         return {'success': False, 'error': 'PA Setupbot request timed out'}
@@ -97,14 +84,13 @@ def setup_teams_channel(team_id, job_number, job_name, record_id):
         return {'success': False, 'error': str(e)}
     
     # ===================
-    # PATCH AIRTABLE
+    # PATCH AIRTABLE (Teams fields only — Files Url handled by Dropbox)
     # ===================
     
     try:
         fields = {
             'Teams Channel ID': channel_id,
             'Channel Url': channel_url,
-            'Files Url': files_url
         }
         
         print(f'[setup] Patching Airtable: {fields}')
@@ -126,7 +112,6 @@ def setup_teams_channel(team_id, job_number, job_name, record_id):
             'error': f'Channel created but Airtable update failed: {e}',
             'channelId': channel_id,
             'channelUrl': channel_url,
-            'filesUrl': files_url
         }
     
     return {
@@ -134,5 +119,4 @@ def setup_teams_channel(team_id, job_number, job_name, record_id):
         'jobNumber': job_number,
         'channelId': channel_id,
         'channelUrl': channel_url,
-        'filesUrl': files_url
     }
