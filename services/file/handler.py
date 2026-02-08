@@ -1,13 +1,13 @@
 """
 File Service
-Files attachments to SharePoint job folders.
+Files attachments to Dropbox job folders.
 
 GO IN → DO THING → SEND COMMS → GET OUT
 
 Steps:
 1. Validate inputs
-2. Look up job (get files_url, channel info)
-3. File attachments to -- Other
+2. Look up job
+3. File attachments to Workings
 4. Post to Teams
 5. Send confirmation
 """
@@ -23,11 +23,11 @@ from utils import airtable, connect, file
 
 def process_file(data):
     """
-    File attachments to a job's SharePoint folder.
+    File attachments to a job's Dropbox folder.
     
     1. Validate inputs
     2. Look up job
-    3. File attachments to -- Other
+    3. File attachments to Workings
     4. Post to Teams
     5. Send confirmation
     """
@@ -81,19 +81,12 @@ def process_file(data):
         
         print(f"[file] Found: {project_info['projectName']}")
         
-        files_url = project_info.get('filesUrl', '')
         team_id = project_info.get('teamId')
         channel_id = project_info.get('channelId')
         channel_url = project_info.get('channelUrl')
         
-        if not files_url:
-            error_msg = f'No job bag configured for {job_number}'
-            print(f"[file] {error_msg}")
-            connect.send_failure(
-                to_email=sender_email, route='file', error_message=error_msg,
-                sender_name=sender_name, job_number=job_number, subject_line=subject_line
-            )
-            return jsonify({'success': False, 'error': error_msg, 'results': results})
+        # Extract client code from job number (e.g. "TOW 091" → "TOW")
+        client_code = job_number.split(' ')[0] if ' ' in job_number else job_number[:3]
         
         # ===================
         # 2. FILE ATTACHMENTS
@@ -105,11 +98,13 @@ def process_file(data):
         if not email_body_for_eml and internet_message_id:
             email_body_for_eml = airtable.get_email_body(internet_message_id)
         
-        file_result = file.file_to_sharepoint(
+        file_result = file.file_to_dropbox(
             job_number=job_number,
             attachment_names=attachment_names,
-            files_url=files_url,
-            route='file',  # Maps to -- Other
+            client_code=client_code,
+            job_name=project_info['projectName'],
+            route='file',
+            project_record_id=job_record_id,
             email_content=email_body_for_eml,
             sender_name=sender_name,
             sender_email=sender_email,
@@ -130,8 +125,8 @@ def process_file(data):
             return jsonify({'success': False, 'error': error_msg, 'results': results})
         
         files_count = file_result.get('count', len(attachment_names))
-        folder_url = file_result.get('folderUrl', '')
-        destination = file_result.get('destination', '-- Other')
+        dropbox_url = file_result.get('dropboxUrl', '')
+        destination = file_result.get('destination', 'Workings')
         
         print(f"[file] Filed: {files_count} files to {destination}")
         
@@ -142,8 +137,8 @@ def process_file(data):
         teams_subject = f"FILED: {files_count} {files_word} added"
         teams_body = f"Filed {files_count} {files_word} to {destination}."
         
-        if folder_url:
-            teams_body += f"\n\nLink to files: {folder_url}"
+        if dropbox_url:
+            teams_body += f"\n\nLink to files: {dropbox_url}"
         
         print(f"[file] Posting to Teams...")
         teams_result = connect.post_to_teams(
@@ -169,7 +164,7 @@ def process_file(data):
             to_email=sender_email, route='file', sender_name=sender_name,
             job_number=job_number, job_name=project_info['projectName'],
             subject_line=subject_line, original_email=original_email,
-            files_url=folder_url, channel_url=channel_url, results=results
+            files_url=dropbox_url, channel_url=channel_url, results=results
         )
         results['email'] = email_result
         print(f"[file] Email: {email_result.get('success')}")
@@ -184,7 +179,7 @@ def process_file(data):
             'projectName': project_info['projectName'],
             'filesFiled': files_count,
             'destination': destination,
-            'folderUrl': folder_url,
+            'dropboxUrl': dropbox_url,
             'results': results,
             'teamsPosted': results['teams'].get('success', False) if results['teams'] else False,
             'emailSent': results['email'].get('success', False) if results['email'] else False
