@@ -105,12 +105,6 @@ def process_file(data):
             job_name=project_info['projectName'],
             route='file',
             project_record_id=job_record_id,
-            email_content=email_body_for_eml,
-            sender_name=sender_name,
-            sender_email=sender_email,
-            recipients=recipients,
-            subject=subject_line,
-            received_datetime=received_datetime
         )
         
         results['file'] = file_result
@@ -137,7 +131,7 @@ def process_file(data):
         teams_subject = "Files filed 📁"
         
         file_list = ''.join(f'<li>{f}</li>' for f in file_result.get('filesMoved', []))
-        teams_body = f"Filed {files_count} {files_word}:<br><ul>{file_list}</ul>"
+        teams_body = f"<ul>{file_list}</ul>"
         
         if dropbox_url:
             teams_body += f'<a href="{dropbox_url}">View files here</a>'
