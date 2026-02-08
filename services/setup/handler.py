@@ -9,10 +9,11 @@ Steps:
 2. Claude extracts brief details
 3. Reserve job number
 4. Create Project record
-5. Create Tracker record (costs go here)
-6. Create Teams channel
-7. Post brief to Teams
-8. Send confirmation email
+5. Create Dropbox job folder
+6. Create Tracker record (costs go here)
+7. Create Teams channel
+8. Post brief to Teams
+9. Send confirmation email
 """
 
 from flask import jsonify
@@ -22,7 +23,7 @@ import json
 import os
 from datetime import datetime, timedelta
 
-from utils import airtable, connect
+from utils import airtable, connect, file
 from utils.setup import setup_teams_channel
 
 # ===================
@@ -121,10 +122,11 @@ def process_setup(data):
     THEN SAME FLOW:
     1. Reserve job number
     2. Create Project record
-    3. Create Tracker record (costs go here)
-    4. Create Teams channel
-    5. Post brief to Teams
-    6. Send confirmation email
+    3. Create Dropbox job folder
+    4. Create Tracker record (costs go here)
+    5. Create Teams channel
+    6. Post brief to Teams
+    7. Send confirmation email
     """
     client_code = data.get('clientCode', '')
     client_name = data.get('clientName', '')
@@ -143,6 +145,7 @@ def process_setup(data):
     results = {
         'brief': None,
         'project': None,
+        'dropbox': None,
         'tracker': None,
         'channel': None,
         'teams_post': None,
@@ -272,7 +275,26 @@ Subject: {subject_line}
         print(f"[setup] Project created: {project_record_id}")
         
         # ===================
-        # 5. CREATE TRACKER
+        # 5. CREATE DROPBOX JOB FOLDER
+        # ===================
+        print(f"[setup] Creating Dropbox folder...")
+        
+        dropbox_url = None
+        folder_result = file.create_job_folder(client_code, job_number, job_name)
+        
+        if folder_result.get('success'):
+            dropbox_url = folder_result.get('dropboxUrl')
+            results['dropbox'] = {'success': True, 'url': dropbox_url}
+            print(f"[setup] Dropbox folder created: {dropbox_url}")
+            
+            # Write Dropbox URL to Files Url field
+            airtable.update_project(project_record_id, files_url=dropbox_url)
+        else:
+            print(f"[setup] Dropbox folder failed (non-fatal): {folder_result.get('error')}")
+            results['dropbox'] = {'success': False, 'error': folder_result.get('error')}
+        
+        # ===================
+        # 6. CREATE TRACKER
         # ===================
         print(f"[setup] Creating tracker record...")
         
@@ -304,7 +326,7 @@ Subject: {subject_line}
             print(f"[setup] Tracker created: {tracker_record_id}")
         
         # ===================
-        # 6. CREATE TEAMS CHANNEL
+        # 7. CREATE TEAMS CHANNEL
         # ===================
         print(f"[setup] Creating Teams channel...")
         
@@ -326,7 +348,7 @@ Subject: {subject_line}
                 print(f"[setup] Channel error: {channel_result.get('error')}")
         
         # ===================
-        # 7. POST BRIEF TO TEAMS
+        # 8. POST BRIEF TO TEAMS
         # ===================
         print(f"[setup] Posting brief to Teams...")
         
@@ -341,11 +363,8 @@ Subject: {subject_line}
             job_number_url = job_number.replace(' ', '')
             update_url = f"https://dot.hunch.co.nz/?view=wip&job={job_number_url}"
             
-            # Get SharePoint URL for files link
-            sharepoint_url = airtable.get_client_sharepoint(client_code)
-            files_url = None
-            if sharepoint_url:
-                files_url = f"{sharepoint_url}/Shared Documents/{job_number} - {job_name}"
+            # Use Dropbox URL for files link
+            files_url = dropbox_url
             
             teams_subject = f"{job_number} - {job_name}"
             teams_body = _format_teams_brief(
@@ -368,7 +387,7 @@ Subject: {subject_line}
             print(f"[setup] Teams post: {teams_result.get('success')}")
         
         # ===================
-        # 8. SEND CONFIRMATION EMAIL
+        # 9. SEND CONFIRMATION EMAIL
         # ===================
         print(f"[setup] Sending confirmation...")
         
@@ -382,7 +401,7 @@ Subject: {subject_line}
         
         # Get channel URL and files URL for the email
         channel_url = results.get('channel', {}).get('channelUrl')
-        files_url = results.get('channel', {}).get('filesUrl')
+        files_url = dropbox_url
         
         email_result = connect.send_setup_confirmation(
             to_email=sender_email,
