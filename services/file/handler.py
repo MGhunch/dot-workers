@@ -134,11 +134,13 @@ def process_file(data):
         # 3. POST TO TEAMS
         # ===================
         files_word = 'file' if files_count == 1 else 'files'
-        teams_subject = f"FILED: {files_count} {files_word} added"
-        teams_body = f"Filed {files_count} {files_word} to {destination}."
+        teams_subject = "Files filed 📁"
+        
+        file_list = ''.join(f'<li>{f}</li>' for f in file_result.get('filesMoved', []))
+        teams_body = f"Filed {files_count} {files_word}:<br><ul>{file_list}</ul>"
         
         if dropbox_url:
-            teams_body += f"\n\nLink to files: {dropbox_url}"
+            teams_body += f'<a href="{dropbox_url}">View files here</a>'
         
         print(f"[file] Posting to Teams...")
         teams_result = connect.post_to_teams(
