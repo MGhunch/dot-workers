@@ -236,7 +236,7 @@ def post_to_teams(team_id, channel_id, subject, body, job_number=None):
         'teamId': team_id,
         'channelId': channel_id,
         'subject': subject or '',
-        'message': body,
+        'message': body.replace('\n', '<br>'),
         'jobNumber': job_number or ''
     }
     
