@@ -5,9 +5,9 @@ Processes job updates from email content.
 GO IN → DO THING → SEND COMMS → GET OUT
 
 Steps:
-1. File attachments (if any)
-2. Get email body from Traffic table
-3. Look up job
+1. Get email body from Traffic table
+2. Look up job
+3. File attachments (if any) — after lookup so we have job details
 4. Claude extracts update
 5. Write to Airtable
 6. Post to Teams
@@ -69,9 +69,9 @@ def process_update(data):
     """
     Process a job update.
     
-    1. File attachments (if any)
-    2. Get email body from Traffic table
-    3. Look up job
+    1. Get email body from Traffic table
+    2. Look up job
+    3. File attachments (if any)
     4. Claude extracts update
     5. Write to Airtable
     6. Post to Teams
@@ -84,7 +84,6 @@ def process_update(data):
     subject_line = data.get('subjectLine', '')
     team_id = data.get('teamId')
     channel_id = data.get('teamsChannelId')
-    files_url = data.get('filesUrl', '')
     
     # Attachment info
     has_attachments = data.get('hasAttachments', False)
@@ -118,39 +117,7 @@ def process_update(data):
     
     try:
         # ===================
-        # 1. FILE ATTACHMENTS (if any)
-        # ===================
-        if has_attachments and attachment_names:
-            print(f"[update] Filing {len(attachment_names)} attachments...")
-            
-            # Get email body for .eml file - payload first, then Airtable
-            email_body_for_eml = data.get('emailContent') or airtable.get_email_body(internet_message_id)
-            
-            file_result = file.file_to_sharepoint(
-                job_number=job_number,
-                attachment_names=attachment_names,
-                files_url=files_url,
-                route='update',
-                email_content=email_body_for_eml,
-                sender_name=sender_name,
-                sender_email=sender_email,
-                recipients=recipients,
-                subject=subject_line,
-                received_datetime=received_datetime
-            )
-            
-            results['file'] = file_result
-            
-            if file_result.get('success'):
-                print(f"[update] Filed: {file_result.get('count', 0)} files to {file_result.get('destination')}")
-            else:
-                print(f"[update] Filing failed: {file_result.get('error')}")
-                # Don't fail the whole update if filing fails - continue with other steps
-        else:
-            print(f"[update] No attachments to file")
-        
-        # ===================
-        # 2. GET EMAIL BODY
+        # 1. GET EMAIL BODY
         # ===================
         print(f"[update] Getting email body...")
         email_body = data.get('emailContent') or airtable.get_email_body(internet_message_id)
@@ -167,7 +134,7 @@ def process_update(data):
         print(f"[update] Email body: {len(email_body)} chars")
         
         # ===================
-        # 3. LOOK UP JOB
+        # 2. LOOK UP JOB
         # ===================
         print(f"[update] Looking up job...")
         job_record_id, project_info, lookup_error = airtable.get_project(job_number)
@@ -186,6 +153,40 @@ def process_update(data):
             team_id = project_info.get('teamId')
         if not channel_id:
             channel_id = project_info.get('channelId')
+        
+        # ===================
+        # 3. FILE ATTACHMENTS (after lookup so we have job details)
+        # ===================
+        if has_attachments and attachment_names:
+            print(f"[update] Filing {len(attachment_names)} attachments...")
+            
+            client_code = job_number.split(' ')[0] if ' ' in job_number else job_number[:3]
+            email_body_for_eml = data.get('emailContent') or email_body
+            
+            file_result = file.file_to_dropbox(
+                job_number=job_number,
+                attachment_names=attachment_names,
+                client_code=client_code,
+                job_name=project_info['projectName'],
+                route='update',
+                project_record_id=job_record_id,
+                email_content=email_body_for_eml,
+                sender_name=sender_name,
+                sender_email=sender_email,
+                recipients=recipients,
+                subject=subject_line,
+                received_datetime=received_datetime
+            )
+            
+            results['file'] = file_result
+            
+            if file_result.get('success'):
+                print(f"[update] Filed: {file_result.get('count', 0)} files to {file_result.get('destination')}")
+            else:
+                print(f"[update] Filing failed: {file_result.get('error')}")
+                # Don't fail the whole update if filing fails - continue with other steps
+        else:
+            print(f"[update] No attachments to file")
         
         # ===================
         # 4. CLAUDE EXTRACTS
@@ -276,8 +277,8 @@ Current job data:
         teams_body = teams_message.get('body', update_summary)
         
         # Append files link if available
-        if results['file'] and results['file'].get('success') and results['file'].get('folderUrl'):
-            teams_body += f"\n\nLink to files: {results['file'].get('folderUrl')}"
+        if results['file'] and results['file'].get('success') and results['file'].get('dropboxUrl'):
+            teams_body += f"\n\nLink to files: {results['file'].get('dropboxUrl')}"
         
         print(f"[update] Posting to Teams...")
         teams_result = connect.post_to_teams(
@@ -301,7 +302,7 @@ Current job data:
         # Include folder URL if files were filed
         folder_url = None
         if results['file'] and results['file'].get('success'):
-            folder_url = results['file'].get('folderUrl')
+            folder_url = results['file'].get('dropboxUrl')
         
         # Get channel URL from project info
         channel_url = project_info.get('channelUrl')
