@@ -346,16 +346,41 @@ def file_to_dropbox(job_number, attachment_names, client_code, job_name,
     errors = []
 
     if attachment_names:
-        try:
-            transfer_files = _dropbox_list_folder(FILE_TRANSFER_PATH)
-            print(f'[file] Files in transfer: {len(transfer_files)}')
-        except Exception as e:
-            print(f'[file] Error listing File transfer: {e}')
-            return {
-                'success': False,
-                'filed': False,
-                'error': f'Could not list File transfer folder: {e}'
-            }
+
+        # ===================
+        # LIST /File transfer/ WITH RETRY
+        # PA Listener may still be uploading — wait and retry if files not found
+        # ===================
+
+        MAX_RETRIES = 3
+        RETRY_DELAY = 15  # seconds
+
+        transfer_files = None
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                transfer_files = _dropbox_list_folder(FILE_TRANSFER_PATH)
+                print(f'[file] Files in transfer: {len(transfer_files)} (attempt {attempt}/{MAX_RETRIES})')
+            except Exception as e:
+                print(f'[file] Error listing File transfer: {e}')
+                return {
+                    'success': False,
+                    'filed': False,
+                    'error': f'Could not list File transfer folder: {e}'
+                }
+
+            # Check if all expected attachments are present
+            all_found = all(
+                _find_file_in_transfer(name, transfer_files)
+                for name in attachment_names
+            )
+
+            if all_found:
+                break
+
+            if attempt < MAX_RETRIES:
+                missing = [name for name in attachment_names if not _find_file_in_transfer(name, transfer_files)]
+                print(f'[file] Waiting for files: {missing} — retrying in {RETRY_DELAY}s...')
+                time.sleep(RETRY_DELAY)
 
         # ===================
         # MOVE EACH FILE
@@ -365,7 +390,7 @@ def file_to_dropbox(job_number, attachment_names, client_code, job_name,
             transfer_name = _find_file_in_transfer(attachment_name, transfer_files)
 
             if not transfer_name:
-                print(f'[file] NOT FOUND in transfer: {attachment_name}')
+                print(f'[file] NOT FOUND in transfer after {MAX_RETRIES} attempts: {attachment_name}')
                 errors.append(f'Not found: {attachment_name}')
                 continue
 
