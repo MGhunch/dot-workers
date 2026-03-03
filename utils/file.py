@@ -38,15 +38,15 @@ CLIENT_PATHS = {
     'SKY': 'Clients/Sky',
     'TOW': 'Clients/Tower',
     'FIS': 'Clients/Fisher Funds',
-    'ONE': 'Clients/One NZ/Marketing',
-    'ONS': 'Clients/One NZ/Simplification',
-    'ONB': 'Clients/One NZ/Business',
-    'HUN': 'Clients/Hunch',
+    'ONE': 'Clients/One NZ - Marketing',
+    'ONS': 'Clients/One NZ - Simplification',
+    'ONB': 'Clients/One NZ - Business',
+    'HUN': 'Clients/Hunch - Projects',
     # Other clients
-    'LAB': 'Clients/Other/Labour',
+    'LAB': 'Clients/Labour',
     'FST': 'Clients/Other/Firestop',
     'EON': 'Clients/Other/Eon Fibre',
-    'WKA': 'Clients/Other/Waikato',
+    'WKA': 'Clients/Other/Whakarongorau',
 }
 
 
