@@ -41,7 +41,7 @@ CLIENT_PATHS = {
     'ONE': 'Clients/One NZ - Marketing',
     'ONS': 'Clients/One NZ - Simplification',
     'ONB': 'Clients/One NZ - Business',
-    'HUN': 'Clients/Hunch - Projects',
+    'HUN': 'Hunch/__Projects',
     # Other clients
     'LAB': 'Clients/Labour',
     'FST': 'Clients/Other/Firestop',
