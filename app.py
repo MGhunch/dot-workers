@@ -100,6 +100,17 @@ def wip_email():
 
 
 # ===================
+# UPLOAD SERVICE
+# ===================
+
+@app.route('/upload', methods=['POST'])
+def upload():
+    """Direct file upload from Hub to Dropbox job folder"""
+    from services.upload.handler import process_upload
+    return process_upload(request)
+
+
+# ===================
 # RUN
 # ===================
 
