@@ -196,6 +196,29 @@ def _dropbox_upload(path, content):
     raise ValueError(f'Dropbox upload failed: {response.status_code} - {response.text[:200]}')
 
 
+def _dropbox_upload_binary(path, content):
+    """Upload binary file content (bytes) directly to Dropbox."""
+    response = httpx.post(
+        'https://content.dropboxapi.com/2/files/upload',
+        headers={
+            **_dropbox_headers(),
+            'Content-Type': 'application/octet-stream',
+            'Dropbox-API-Arg': json.dumps({
+                'path': path,
+                'mode': 'add',
+                'autorename': True,
+            })
+        },
+        content=content,
+        timeout=TIMEOUT
+    )
+
+    if response.status_code == 200:
+        return response.json()
+
+    raise ValueError(f'Dropbox upload failed: {response.status_code} - {response.text[:200]}')
+
+
 def _dropbox_list_folder(path):
     """List files in a Dropbox folder."""
     response = httpx.post(
