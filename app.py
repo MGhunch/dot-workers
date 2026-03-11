@@ -39,7 +39,7 @@ def index():
     return jsonify({
         'service': 'dot-workers',
         'status': 'running',
-        'endpoints': ['/update', '/setup', '/file', '/horoscope', '/todo', '/upload', '/wip/email']
+        'endpoints': ['/update', '/setup', '/file', '/horoscope', '/todo/email', '/upload', '/wip/email']
     })
 
 
@@ -71,7 +71,7 @@ def horoscope():
     return get_horoscope(request.json)
 
 
-@app.route('/todo', methods=['POST'])
+@app.route('/todo/email', methods=['POST'])
 def todo():
     """Send TO DO email."""
     return send_todo_email(request.json)
