@@ -13,7 +13,7 @@ from flask import jsonify
 from utils.airtable import get_jobs_for_client
 from utils.auth import generate_job_link
 from utils.connect import PA_POSTMAN_URL, TIMEOUT
-from .email import build_wip_email, SUBJECT_LINE
+from .email import build_wip_email, get_subject_line
 
 import httpx
 
@@ -123,7 +123,7 @@ def send_wip_email(data):
         # Send via Postman
         payload = {
             'to': email,
-            'subject': SUBJECT_LINE,
+            'subject': get_subject_line(client_code),
             'body': email_html
         }
 

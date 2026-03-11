@@ -13,7 +13,23 @@ DARK_GREY = '#333'
 LOGO_URL = "https://raw.githubusercontent.com/MGhunch/dot-hub/main/images/ai2-logo.png"
 ASK_DOT_HEADER = "https://raw.githubusercontent.com/MGhunch/dot-hub/main/images/Askdot-header.png"
 
-SUBJECT_LINE = "Latest WIP from Hunch"
+SUBJECT_LINE = "Latest WIP from Hunch"  # Fallback
+
+
+def get_subject_line(client_code):
+    """Generate subject line with client name."""
+    # One NZ divisions all use "One NZ"
+    if client_code in ['ONE', 'ONB', 'ONS']:
+        return "One NZ WIP from Hunch"
+    
+    # Import here to avoid circular dependency
+    from utils.airtable import get_client_name
+    
+    client_name = get_client_name(client_code)
+    if client_name:
+        return f"{client_name} WIP from Hunch"
+    
+    return SUBJECT_LINE
 
 
 # ===================
@@ -47,22 +63,27 @@ def _section_header(text):
 
 
 def _job_card(job, hub_link):
-    """Build HTML for a job card - clickable, with description."""
+    """Build HTML for a job card - clickable, with description and update."""
     description = job.get('description', '')
-    if len(description) > 120:
-        description = description[:117] + '...'
+    update = job.get('update', '')
 
     job_number = job.get('jobNumber', '')
     job_name = job.get('jobName', '')
 
-    return f'''<a href="{hub_link}" style="display: block; text-decoration: none; color: inherit; background: #f9f9f9; border-radius: 12px; padding: 16px 18px; margin-bottom: 10px; border-left: 3px solid {BRAND_RED};">
-  <div style="margin-bottom: 8px;">
+    # Update line (only show if there's an update)
+    update_html = ''
+    if update:
+        update_html = f'<div style="font-size: 13px; color: #888; font-style: italic; line-height: 1.5; margin-bottom: 10px;">{update}</div>'
+
+    return f'''<a href="{hub_link}" style="display: block; text-decoration: none; color: inherit; background: #f9f9f9; border-radius: 0 12px 12px 0; padding: 16px 18px; margin-bottom: 10px; border-left: 3px solid {BRAND_RED};">
+  <div style="margin-bottom: 10px;">
     <span style="font-size: 15px; font-weight: 600; color: #1a1a1a;">{job_number}</span>
-    <span style="color: #ccc; margin: 0 8px;">&middot;</span>
+    <span style="color: {BRAND_RED}; margin: 0 8px;">|</span>
     <span style="font-size: 15px; font-weight: 600; color: #1a1a1a;">{job_name}</span>
   </div>
-  <div style="font-size: 15px; color: #666; line-height: 1.4; margin-bottom: 8px;">{description}</div>
-  <div style="font-size: 13px; font-weight: 600; color: {BRAND_RED};">View details &rsaquo;</div>
+  <div style="font-size: 15px; color: #444; line-height: 1.5; margin-bottom: 4px;">{description}</div>
+  {update_html}
+  <div style="font-size: 13px; font-weight: 600; color: {BRAND_RED};">See more &rsaquo;</div>
 </a>'''
 
 
@@ -86,6 +107,7 @@ def build_wip_email(jobs, job_links, first_name='there', custom_note=None):
 
     # === INTRO ===
     intro_html = f'<p style="margin: 0 0 6px 0; font-size: 16px;">Hey {first_name},</p>'
+    intro_html += '<p style="margin: 0 0 16px 0; font-size: 16px; color: #333;">Here\'s what\'s new, what\'s due and what needs a nudge.</p>'
 
     if custom_note:
         intro_html += f'<p style="margin: 0 0 16px 0; font-size: 16px; color: #333;">{custom_note}</p>'
@@ -121,6 +143,9 @@ def build_wip_email(jobs, job_links, first_name='there', custom_note=None):
             hub_link = job_links.get(job.get('jobNumber'), '#')
             sections_html += _job_card(job, hub_link)
 
+    # === DISCLAIMER ===
+    disclaimer_html = '<p style="font-size: 13px; color: #888; margin: 24px 0 0 0;">Updates are live notes. See more for the full story.</p>'
+
     # === COMPLETE EMAIL ===
     email_html = f'''<!DOCTYPE html>
 <html>
@@ -135,6 +160,7 @@ def build_wip_email(jobs, job_links, first_name='there', custom_note=None):
 {_header()}
 {intro_html}
 {sections_html}
+{disclaimer_html}
 {_footer()}
 
 </div>
