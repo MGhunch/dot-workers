@@ -612,6 +612,7 @@ def get_jobs_for_client(client_code):
                 'jobNumber': fields.get('Job Number', ''),
                 'jobName': fields.get('Project Name', ''),
                 'description': fields.get('Description', ''),
+                'update': fields.get('Update', ''),
                 'status': status,
                 'withClient': fields.get('With Client?', False),
             }
