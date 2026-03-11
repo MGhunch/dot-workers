@@ -46,7 +46,7 @@ def send_wip_email(data):
 
     client_code = data.get('clientCode')
     recipients = data.get('recipients', [])
-    custom_note = data.get('customNote')
+    intro = data.get('intro')
 
     if not client_code:
         return jsonify({'success': False, 'error': 'Missing clientCode'}), 400
@@ -117,7 +117,7 @@ def send_wip_email(data):
             jobs=jobs,
             job_links=job_links,
             first_name=first_name,
-            custom_note=custom_note
+            intro=intro
         )
 
         # Send via Postman

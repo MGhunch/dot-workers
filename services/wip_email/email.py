@@ -91,7 +91,7 @@ def _job_card(job, hub_link):
 # MAIN BUILDER
 # ===================
 
-def build_wip_email(jobs, job_links, first_name='there', custom_note=None):
+def build_wip_email(jobs, job_links, first_name='there', intro=None):
     """
     Build the complete client WIP email HTML.
 
@@ -99,18 +99,18 @@ def build_wip_email(jobs, job_links, first_name='there', custom_note=None):
         jobs: {'with_hunch': [...], 'with_you': [...], 'on_hold': [...], 'upcoming': [...]}
         job_links: dict mapping job_number -> hub_link
         first_name: recipient's first name
-        custom_note: optional personal note from sender
+        intro: optional custom intro (replaces default if provided)
 
     Returns:
         Complete HTML string
     """
 
     # === INTRO ===
+    default_intro = "Here's what's new, what's due and what needs a nudge."
+    intro_text = intro if intro else default_intro
+    
     intro_html = f'<p style="margin: 0 0 6px 0; font-size: 16px;">Hey {first_name},</p>'
-    intro_html += '<p style="margin: 0 0 16px 0; font-size: 16px; color: #333;">Here\'s what\'s new, what\'s due and what needs a nudge.</p>'
-
-    if custom_note:
-        intro_html += f'<p style="margin: 0 0 16px 0; font-size: 16px; color: #333;">{custom_note}</p>'
+    intro_html += f'<p style="margin: 0 0 16px 0; font-size: 16px; color: #333;">{intro_text}</p>'
 
     # === SECTIONS ===
     sections_html = ''
