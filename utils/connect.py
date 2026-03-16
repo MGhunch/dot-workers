@@ -109,6 +109,11 @@ def _channel_button(url):
     return f'<a href="{url}" style="display: inline-block; border: 2px solid #ED1C24; color: #ED1C24; text-decoration: none; padding: 8px 20px; border-radius: 50px; font-size: 14px; font-weight: 500; margin-top: 8px;">› Open in Teams</a>'
 
 
+def _job_bag_button(url):
+    """Build red pill button for Job Bag link"""
+    return f'<a href="{url}" style="display: inline-block; border: 2px solid #ED1C24; color: #ED1C24; text-decoration: none; padding: 8px 20px; border-radius: 50px; font-size: 14px; font-weight: 500; margin-top: 8px;">› Open Job Bag</a>'
+
+
 def _build_checklist(results, files_url=None):
     """
     Build checklist HTML from results dict.
@@ -192,28 +197,23 @@ def _build_setup_checklist(results):
             has_failure = True
             items.append(_checklist_item(False, "Tracker not updated"))
     
-    # Channel
-    channel_result = results.get('channel')
-    if channel_result:
-        if channel_result.get('success'):
-            items.append(_checklist_item(True, "Teams channel created"))
-        elif channel_result.get('skipped'):
-            has_failure = True
-            items.append(_checklist_item(False, "Teams channel skipped (no Team ID)"))
+    # Update (state of play)
+    update_result = results.get('update')
+    if update_result:
+        if update_result.get('success'):
+            items.append(_checklist_item(True, "First update posted"))
         else:
             has_failure = True
-            items.append(_checklist_item(False, "Teams channel not created"))
+            items.append(_checklist_item(False, "First update not posted"))
     
-    # Teams post
-    teams_post_result = results.get('teams_post')
-    if teams_post_result:
-        if teams_post_result.get('success'):
-            items.append(_checklist_item(True, "Brief posted to Teams"))
-        elif teams_post_result.get('skipped'):
-            pass  # Don't show - redundant with channel skipped
+    # Dropbox
+    dropbox_result = results.get('dropbox')
+    if dropbox_result:
+        if dropbox_result.get('success'):
+            items.append(_checklist_item(True, "Dropbox folder created"))
         else:
             has_failure = True
-            items.append(_checklist_item(False, "Brief not posted"))
+            items.append(_checklist_item(False, "Dropbox folder not created"))
     
     checklist_html = ''
     if items:
@@ -362,12 +362,12 @@ def send_confirmation(to_email, route, sender_name=None, job_number=None,
 # ===================
 
 def send_setup_confirmation(to_email, sender_name=None, job_number=None,
-                            job_name=None, channel_url=None, files_url=None,
+                            job_name=None, job_bag_url=None, files_url=None,
                             subject_line=None, original_email=None, brief=None, results=None):
     """
     Send confirmation email after new job setup.
     
-    Shows what was created and provides links to Teams channel and files.
+    Shows what was created and provides links to Job Bag and files.
     Includes brief summary or original email trail.
     """
     first_name = _get_first_name(sender_name)
@@ -384,10 +384,10 @@ def send_setup_confirmation(to_email, sender_name=None, job_number=None,
     else:
         intro = "All set up and ready to go."
     
-    # Build buttons (Teams + Files)
+    # Build buttons (Job Bag + Files)
     buttons = []
-    if channel_url:
-        buttons.append(f'<a href="{channel_url}" style="display: inline-block; border: 2px solid #ED1C24; color: #ED1C24; text-decoration: none; padding: 8px 20px; border-radius: 50px; font-size: 14px; font-weight: 500;">› Open in Teams</a>')
+    if job_bag_url:
+        buttons.append(f'<a href="{job_bag_url}" style="display: inline-block; border: 2px solid #ED1C24; color: #ED1C24; text-decoration: none; padding: 8px 20px; border-radius: 50px; font-size: 14px; font-weight: 500;">› Open Job Bag</a>')
     if files_url:
         buttons.append(f'<a href="{files_url}" style="display: inline-block; border: 2px solid #ED1C24; color: #ED1C24; text-decoration: none; padding: 8px 20px; border-radius: 50px; font-size: 14px; font-weight: 500;">› See the files</a>')
     buttons_html = f'<div style="margin-top: 12px;">{" &nbsp; ".join(buttons)}</div>' if buttons else ''
@@ -401,8 +401,6 @@ def send_setup_confirmation(to_email, sender_name=None, job_number=None,
             brief_parts.append(f"<b>What's the job?</b> {brief['theJob']}")
         if brief.get('owner'):
             brief_parts.append(f"<b>Owner:</b> {brief['owner']}")
-        if brief.get('costs'):
-            brief_parts.append(f"<b>Tracker:</b> {brief['costs']}")
         if brief.get('when'):
             brief_parts.append(f"<b>Live:</b> {brief['when']}")
         if brief_parts:
