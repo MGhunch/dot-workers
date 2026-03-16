@@ -2,7 +2,7 @@
 Setup Service
 Creates new jobs from email briefs.
 
-GO IN → EXTRACT BRIEF → CREATE JOB → SET UP CHANNEL → POST BRIEF → SEND CONFIRMATION → GET OUT
+GO IN → EXTRACT BRIEF → CREATE JOB → CREATE UPDATE → SEND CONFIRMATION → GET OUT
 
 Steps:
 1. Get email body from Traffic table
@@ -10,10 +10,9 @@ Steps:
 3. Reserve job number
 4. Create Project record
 5. Create Dropbox job folder
-6. Create Tracker record (costs go here)
-7. Create Teams channel
-8. Post brief to Teams
-9. Send confirmation email
+6. Create Tracker record ($5K ballpark default)
+7. Write first Update (state of play)
+8. Send confirmation email
 """
 
 from flask import jsonify
@@ -24,7 +23,6 @@ import os
 from datetime import datetime, timedelta
 
 from utils import airtable, connect, file
-from utils.setup import setup_teams_channel
 
 # ===================
 # CLAUDE CLIENT
@@ -66,45 +64,50 @@ def _get_working_days_from_today(days=5):
     return current.strftime('%Y-%m-%d')
 
 
-def _format_teams_brief(job_number, job_name, brief, update_due=None, update_url=None, files_url=None):
+def _format_state_of_play(brief, job_number):
     """
-    Format the brief for Teams posting.
-    Uses HTML formatting for Teams compatibility.
+    Build the first Update - state of play with visible gaps.
+    Uses markdown-style formatting.
     """
-    parts = []
+    lines = []
     
     # What's the job?
-    the_job = brief.get('theJob') or f"Set up {job_name}"
-    parts.append(f"<b>What's the job?</b><br>{the_job}")
+    lines.append("**What's the job?**")
+    lines.append(brief.get('theJob', 'TBC'))
+    lines.append("")
     
-    # Who's owning it?
-    owner = brief.get('owner')
-    parts.append(f"<b>Who's owning it?</b><br>{owner or 'TBC'}")
+    # Key details
+    lines.append(f"**Owner:** {brief.get('owner', 'TBC')}")
+    lines.append(f"**Live:** {brief.get('when', 'TBC')}")
+    lines.append(f"**Budget:** $5K (ballpark)")
+    lines.append("")
     
-    # Tracker
-    costs = brief.get('costs')
-    parts.append(f"<b>Tracker:</b><br>{costs or 'TBC'}")
+    # Strategic context (Who/What/Why) - only if at least one is filled
+    who = brief.get('who', 'TBC')
+    what = brief.get('what', 'TBC')
+    why = brief.get('why', 'TBC')
     
-    # When?
-    when = brief.get('when')
-    due_text = "TBC"
-    if update_due:
-        try:
-            from datetime import datetime
-            due_date = datetime.strptime(update_due, '%Y-%m-%d')
-            due_text = due_date.strftime('%-d %b')  # e.g., "6 Feb"
-        except:
-            due_text = update_due
+    if who != 'TBC' or what != 'TBC' or why != 'TBC':
+        lines.append("**The Customer**")
+        lines.append(f"Who: {who}")
+        lines.append(f"What: {what}")
+        lines.append(f"Why: {why}")
+        lines.append("")
     
-    parts.append(f"<b>When?</b><br>Next update due: {due_text}<br>Live in: {when or 'TBC'}")
+    # Other notes
+    other = brief.get('other')
+    if other:
+        lines.append(f"**Notes:** {other}")
+        lines.append("")
     
-    # Links (each on its own line)
-    if update_url:
-        parts.append(f'<a href="{update_url}">Make an update</a>')
-    if files_url:
-        parts.append(f'<a href="{files_url}">See the files</a>')
+    # Questions to resolve
+    questions = brief.get('questions', [])
+    if questions:
+        lines.append("**To resolve:**")
+        for q in questions:
+            lines.append(f"- {q}")
     
-    return "<br><br>".join(parts)
+    return "\n".join(lines)
 
 
 # ===================
@@ -123,10 +126,9 @@ def process_setup(data):
     1. Reserve job number
     2. Create Project record
     3. Create Dropbox job folder
-    4. Create Tracker record (costs go here)
-    5. Create Teams channel
-    6. Post brief to Teams
-    7. Send confirmation email
+    4. Create Tracker record ($5K ballpark)
+    5. Write first Update (state of play)
+    6. Send confirmation email
     """
     client_code = data.get('clientCode', '')
     client_name = data.get('clientName', '')
@@ -147,8 +149,7 @@ def process_setup(data):
         'project': None,
         'dropbox': None,
         'tracker': None,
-        'channel': None,
-        'teams_post': None,
+        'update': None,
         'email': None
     }
     
@@ -214,7 +215,6 @@ Subject: {subject_line}
         
         job_name = brief.get('jobName', 'New Job')
         owner = brief.get('owner')
-        costs = brief.get('costs')
         update_due = brief.get('updateDue') or _get_working_days_from_today(5)
         
         print(f"[setup] Extracted: {job_name} (confidence: {brief.get('confidence')})")
@@ -248,7 +248,6 @@ Subject: {subject_line}
             description_parts.append(brief['what'])
         description = ' | '.join(description_parts) if description_parts else None
         
-        # Note: costs/ballpark go to Tracker table, not Projects
         live_date = brief.get('when') or 'Tbc'
         
         project_record_id, project_error = airtable.create_project(
@@ -294,28 +293,16 @@ Subject: {subject_line}
             results['dropbox'] = {'success': False, 'error': folder_result.get('error')}
         
         # ===================
-        # 6. CREATE TRACKER
+        # 6. CREATE TRACKER ($5K BALLPARK)
         # ===================
         print(f"[setup] Creating tracker record...")
         
-        # Parse costs to number if present
-        spend = None
-        if costs:
-            # Extract number from string like "$2k", "$5,000", "2000"
-            import re
-            cost_match = re.search(r'[\d,]+(?:\.\d+)?', costs.replace('k', '000').replace('K', '000'))
-            if cost_match:
-                try:
-                    spend = int(float(cost_match.group().replace(',', '')))
-                except ValueError:
-                    pass
-        
         tracker_record_id, tracker_error = airtable.create_tracker(
             project_record_id=project_record_id,
-            spend=spend,
+            spend=5000,
             spend_type='Project budget',
             notes=brief.get('theJob'),
-            ballpark=bool(costs)  # True if costs mentioned (it's an estimate)
+            ballpark=True
         )
         
         if tracker_error:
@@ -326,68 +313,22 @@ Subject: {subject_line}
             print(f"[setup] Tracker created: {tracker_record_id}")
         
         # ===================
-        # 7. CREATE TEAMS CHANNEL
+        # 7. WRITE FIRST UPDATE (STATE OF PLAY)
         # ===================
-        print(f"[setup] Creating Teams channel...")
+        print(f"[setup] Writing first update...")
         
-        if not team_id:
-            print(f"[setup] No Team ID for client {client_code}")
-            results['channel'] = {'success': False, 'error': 'No Team ID configured', 'skipped': True}
+        state_of_play = _format_state_of_play(brief, job_number)
+        update_record_id, update_error = airtable.write_update(project_record_id, state_of_play, update_due)
+        
+        if update_error:
+            print(f"[setup] Update error (non-fatal): {update_error}")
+            results['update'] = {'success': False, 'error': update_error}
         else:
-            channel_result = setup_teams_channel(
-                team_id=team_id,
-                job_number=job_number,
-                job_name=job_name,
-                record_id=project_record_id
-            )
-            results['channel'] = channel_result
-            
-            if channel_result.get('success'):
-                print(f"[setup] Channel created: {channel_result.get('channelId')}")
-            else:
-                print(f"[setup] Channel error: {channel_result.get('error')}")
+            results['update'] = {'success': True, 'recordId': update_record_id}
+            print(f"[setup] Update created: {update_record_id}")
         
         # ===================
-        # 8. POST BRIEF TO TEAMS
-        # ===================
-        print(f"[setup] Posting brief to Teams...")
-        
-        channel_id = results.get('channel', {}).get('channelId')
-        
-        if not team_id or not channel_id:
-            print(f"[setup] Skipping Teams post - no channel")
-            results['teams_post'] = {'success': False, 'skipped': True}
-        else:
-            # Construct URLs for the Teams post
-            # Format job number for URL: "ONS 080" -> "ONS080"
-            job_number_url = job_number.replace(' ', '')
-            update_url = f"https://dot.hunch.co.nz/?view=wip&job={job_number_url}"
-            
-            # Use Dropbox URL for files link
-            files_url = dropbox_url
-            
-            teams_subject = f"{job_number} - {job_name}"
-            teams_body = _format_teams_brief(
-                job_number, 
-                job_name, 
-                brief, 
-                update_due=update_due,
-                update_url=update_url,
-                files_url=files_url
-            )
-            
-            teams_result = connect.post_to_teams(
-                team_id=team_id,
-                channel_id=channel_id,
-                subject=teams_subject,
-                body=teams_body,
-                job_number=job_number
-            )
-            results['teams_post'] = teams_result
-            print(f"[setup] Teams post: {teams_result.get('success')}")
-        
-        # ===================
-        # 9. SEND CONFIRMATION EMAIL
+        # 8. SEND CONFIRMATION EMAIL
         # ===================
         print(f"[setup] Sending confirmation...")
         
@@ -399,17 +340,17 @@ Subject: {subject_line}
             'content': email_body
         }
         
-        # Get channel URL and files URL for the email
-        channel_url = results.get('channel', {}).get('channelUrl')
-        files_url = dropbox_url
+        # Job Bag URL
+        job_number_url = job_number.replace(' ', '')  # "SKY 025" -> "SKY025"
+        job_bag_url = f"https://dot.hunch.co.nz/?job={job_number_url}"
         
         email_result = connect.send_setup_confirmation(
             to_email=sender_email,
             sender_name=sender_name,
             job_number=job_number,
             job_name=job_name,
-            channel_url=channel_url,
-            files_url=files_url,
+            job_bag_url=job_bag_url,
+            files_url=dropbox_url,
             subject_line=subject_line,
             original_email=original_email,
             brief=brief,
