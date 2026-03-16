@@ -567,11 +567,7 @@ def get_jobs_for_client(client_code):
         return {'with_hunch': [], 'with_you': [], 'on_hold': [], 'upcoming': []}
     
     try:
-        # Handle One NZ divisions
-        if client_code in ['ONE', 'ONB', 'ONS']:
-            filter_formula = "AND(OR({Status}='In Progress', {Status}='On Hold', {Status}='Incoming'), OR(FIND('ONE', {Job Number}), FIND('ONB', {Job Number}), FIND('ONS', {Job Number})))"
-        else:
-            filter_formula = f"AND(OR({{Status}}='In Progress', {{Status}}='On Hold', {{Status}}='Incoming'), FIND('{client_code}', {{Job Number}}))"
+        filter_formula = f"AND(OR({{Status}}='In Progress', {{Status}}='On Hold', {{Status}}='Incoming'), FIND('{client_code}', {{Job Number}}))"
         
         params = {'filterByFormula': filter_formula}
         all_records = []
