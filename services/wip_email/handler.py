@@ -11,10 +11,18 @@ import os
 from flask import jsonify
 
 from utils.airtable import get_jobs_for_client
-from utils.connect import PA_POSTMAN_URL, TIMEOUT
 from .email import build_wip_email, get_subject_line
 
 import httpx
+
+
+# ===================
+# CONFIG
+# ===================
+
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
+RESEND_URL = 'https://api.resend.com/emails'
+TIMEOUT = 30.0
 
 
 # ===================
@@ -29,10 +37,11 @@ def send_wip_email(data):
     {
         "clientCode": "SKY",
         "recipients": [
-            {"email": "sarah@sky.co.nz", "firstName": "Sarah", "accessLevel": "Client WIP"},
+            {"email": "sarah@sky.co.nz", "firstName": "Sarah"},
             ...
         ],
-        "customNote": "Optional note" | null
+        "intro": "Optional custom intro" | null,
+        "senderEmail": "michael@hunch.co.nz"
     }
 
     Returns:
@@ -46,6 +55,7 @@ def send_wip_email(data):
     client_code = data.get('clientCode')
     recipients = data.get('recipients', [])
     intro = data.get('intro')
+    sender_email = data.get('senderEmail', 'dot@hunch.co.nz')
 
     if not client_code:
         return jsonify({'success': False, 'error': 'Missing clientCode'}), 400
@@ -73,10 +83,10 @@ def send_wip_email(data):
 
     print(f"[wip-email] Found {total_jobs} jobs")
 
-    # 2. Check Postman is configured
-    if not PA_POSTMAN_URL:
-        print("[wip-email] ERROR: PA_POSTMAN_URL not configured")
-        return jsonify({'success': False, 'error': 'PA_POSTMAN_URL not configured'}), 500
+    # 2. Check Resend is configured
+    if not RESEND_API_KEY:
+        print("[wip-email] ERROR: RESEND_API_KEY not configured")
+        return jsonify({'success': False, 'error': 'RESEND_API_KEY not configured'}), 500
 
     # 3. Build job links (same for all recipients)
     all_jobs = (
@@ -113,17 +123,28 @@ def send_wip_email(data):
             intro=intro
         )
 
-        # Send via Postman
+        # Send via Resend
         payload = {
-            'to': email,
+            'from': sender_email,
+            'to': [email],
             'subject': get_subject_line(client_code),
-            'body': email_html
+            'html': email_html
         }
 
         try:
-            response = httpx.post(PA_POSTMAN_URL, json=payload, timeout=TIMEOUT)
-            success = response.status_code in [200, 202]
+            response = httpx.post(
+                RESEND_URL,
+                headers={
+                    'Authorization': f'Bearer {RESEND_API_KEY}',
+                    'Content-Type': 'application/json'
+                },
+                json=payload,
+                timeout=TIMEOUT
+            )
+            success = response.status_code == 200
             print(f"[wip-email] Sent to {email}: {response.status_code}")
+            if not success:
+                print(f"[wip-email] Response: {response.text}")
             results.append({'email': email, 'success': success})
         except Exception as e:
             print(f"[wip-email] ERROR sending to {email}: {e}")
