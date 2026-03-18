@@ -11,7 +11,6 @@ import os
 from flask import jsonify
 
 from utils.airtable import get_jobs_for_client
-from utils.auth import generate_job_link
 from utils.connect import PA_POSTMAN_URL, TIMEOUT
 from .email import build_wip_email, get_subject_line
 
@@ -79,8 +78,7 @@ def send_wip_email(data):
         print("[wip-email] ERROR: PA_POSTMAN_URL not configured")
         return jsonify({'success': False, 'error': 'PA_POSTMAN_URL not configured'}), 500
 
-    # 3. Send to each recipient
-    results = []
+    # 3. Build job links (same for all recipients)
     all_jobs = (
         jobs.get('with_hunch', []) +
         jobs.get('with_you', []) +
@@ -88,29 +86,24 @@ def send_wip_email(data):
         jobs.get('upcoming', [])
     )
 
+    job_links = {}
+    for job in all_jobs:
+        job_number = job.get('jobNumber')
+        if job_number:
+            job_links[job_number] = f"https://dot.hunch.co.nz/job/{job_number}"
+
+    # 4. Send to each recipient
+    results = []
+
     for recipient in recipients:
         email = recipient.get('email')
         first_name = recipient.get('firstName', 'there')
-        access_level = recipient.get('accessLevel', 'Client WIP')
 
         if not email:
             results.append({'email': email, 'success': False, 'error': 'No email'})
             continue
 
-        print(f"[wip-email] Building for {email} ({access_level})...")
-
-        # Generate job links with this recipient's token
-        job_links = {}
-        for job in all_jobs:
-            job_number = job.get('jobNumber')
-            if job_number:
-                job_links[job_number] = generate_job_link(
-                    job_number=job_number,
-                    email=email,
-                    client_code=client_code,
-                    first_name=first_name,
-                    access_level=access_level
-                )
+        print(f"[wip-email] Building for {email}...")
 
         # Build email HTML
         email_html = build_wip_email(
