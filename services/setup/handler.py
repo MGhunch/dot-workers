@@ -249,6 +249,8 @@ Subject: {subject_line}
         description = ' | '.join(description_parts) if description_parts else None
         
         live_date = brief.get('when') or 'Tbc'
+        # Hub form may override the default status; email path falls through to 'Incoming'
+        status = brief.get('status') or 'Incoming'
         
         project_record_id, project_error = airtable.create_project(
             job_number=job_number,
@@ -256,7 +258,7 @@ Subject: {subject_line}
             description=description,
             owner=owner,
             stage='Triage',
-            status='Incoming',
+            status=status,
             update_due=update_due,
             live_date=live_date
         )
@@ -272,6 +274,12 @@ Subject: {subject_line}
         
         results['project'] = {'success': True, 'recordId': project_record_id}
         print(f"[setup] Project created: {project_record_id}")
+        
+        # Hub form may flag the job as already with the client at creation.
+        # Email path never sets this — falls through unchanged.
+        if brief.get('withClient'):
+            airtable.update_project(project_record_id, with_client=True)
+            print(f"[setup] With Client? set to True")
         
         # ===================
         # 5. CREATE DROPBOX JOB FOLDER
@@ -297,12 +305,19 @@ Subject: {subject_line}
         # ===================
         print(f"[setup] Creating tracker record...")
         
+        # Hub form may override these defaults; email path falls through to today's behaviour.
+        spend         = brief.get('spend') or 5000
+        ballpark      = brief.get('ballpark', True)
+        month         = brief.get('month')                    # None → create_tracker uses current month
+        tracker_notes = brief.get('trackerNotes') or brief.get('theJob')
+        
         tracker_record_id, tracker_error = airtable.create_tracker(
             project_record_id=project_record_id,
-            spend=5000,
+            spend=spend,
             spend_type='Project budget',
-            notes=brief.get('theJob'),
-            ballpark=True
+            month=month,
+            notes=tracker_notes,
+            ballpark=ballpark
         )
         
         if tracker_error:
