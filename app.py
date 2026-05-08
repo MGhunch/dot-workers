@@ -16,6 +16,7 @@ from services.horoscopes.handler import get_horoscope
 from services.todo.handler import send_todo_email
 from services.upload.handler import process_upload
 from services.wip_email.handler import send_wip_email
+from services.spend_chart.handler import generate_spend_chart
 
 # ===================
 # APP SETUP
@@ -39,7 +40,7 @@ def index():
     return jsonify({
         'service': 'dot-workers',
         'status': 'running',
-        'endpoints': ['/update', '/setup', '/file', '/horoscope', '/todo/email', '/upload', '/wip/email']
+        'endpoints': ['/update', '/setup', '/file', '/horoscope', '/todo/email', '/upload', '/wip/email', '/charts/spend']
     })
 
 
@@ -87,6 +88,13 @@ def upload():
 def wip_email():
     """Send WIP email to client."""
     return send_wip_email(request.json)
+
+
+
+@app.route('/charts/spend', methods=['POST'])
+def charts_spend():
+    """Generate a YTD spend chart for one client. Returns base64 PNG."""
+    return generate_spend_chart(request.json)
 
 
 # ===================
