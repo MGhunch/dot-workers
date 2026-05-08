@@ -939,6 +939,59 @@ def get_client_for_chart(client_code):
         return None
 
 
+def get_all_clients_for_chart():
+    """
+    Fetch ALL clients from the Clients table with the metadata needed
+    to build a Hunch-wide YTD chart.
+
+    Returns list of dicts with: code, name, year_end (month name string),
+    monthly_committed (currency as float). Used by the Hunch (whole-of-
+    business) handler to roll up spend across all active clients.
+    """
+    if not AIRTABLE_API_KEY:
+        return []
+
+    try:
+        all_records = []
+        params = {'pageSize': 100}
+        offset = None
+        while True:
+            if offset:
+                params['offset'] = offset
+            response = httpx.get(
+                _url(CLIENTS_TABLE),
+                headers=_headers(),
+                params=params,
+                timeout=TIMEOUT,
+            )
+            response.raise_for_status()
+            data = response.json()
+            all_records.extend(data.get('records', []))
+            offset = data.get('offset')
+            if not offset:
+                break
+
+        out = []
+        for record in all_records:
+            fields = record.get('fields', {})
+            code = fields.get('Client code')
+            if not code:
+                continue
+            out.append({
+                'code': code,
+                'name': fields.get('Clients', code),
+                'year_end': fields.get('Year end'),
+                'monthly_committed': float(fields.get('Monthly Committed') or 0),
+            })
+
+        print(f"[airtable] Fetched {len(out)} clients for Hunch chart")
+        return out
+
+    except Exception as e:
+        print(f"[airtable] Error fetching all clients: {e}")
+        return []
+
+
 def get_tracker_for_client(client_code):
     """
     Fetch all Tracker records for one client.

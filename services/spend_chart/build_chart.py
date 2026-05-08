@@ -101,6 +101,153 @@ def build_chart_bytes(d: dict) -> bytes:
     return buf.getvalue()
 
 
+def build_hunch_chart_bytes(d: dict) -> bytes:
+    """Render the Hunch (whole-of-business) chart with paired bars per month
+    — committed (outlined) and actual (solid) — so the gap is visible.
+    """
+    import io
+    fig = _build_hunch_figure(d)
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=180, facecolor="white")
+    plt.close(fig)
+    return buf.getvalue()
+
+
+def _build_hunch_figure(d: dict):
+    """Hunch-specific figure builder: paired committed vs actual bars per month.
+    Reuses the same chrome (logo, title, variance callout, axis styling) as
+    the single-client renderer, just with different bar geometry.
+    """
+    series = d["series"]
+    code = d["code"]
+    n = len(series)
+    spend = [s["spend"] for s in series]
+    committed_vals = [s.get("committed", 0) for s in series]
+    is_future = [s["is_future"] for s in series]
+    months = [s["month_short"] for s in series]
+
+    fig, ax = plt.subplots(figsize=(11, 5.5), dpi=180)
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
+
+    # Bar geometry — two bars per month, side by side, centred on x=i
+    pair_width = 0.62
+    bar_width  = pair_width / 2 * 0.9   # gap between the pair
+    offset     = pair_width / 4         # half the centre-to-centre spacing
+
+    for i, s in enumerate(series):
+        muted = s["is_future"] or s.get("is_pre_engagement")
+        committed = committed_vals[i]
+        actual    = spend[i]
+
+        # COMMITTED bar — left, outlined (the "target box")
+        if committed > 0:
+            ax.bar(i - offset, committed, width=bar_width,
+                   facecolor="#FFFFFF",
+                   edgecolor=RED if not muted else RED_FUTURE,
+                   linewidth=1.5,
+                   linestyle="solid" if not muted else (0, (3, 2)))
+
+        # ACTUAL bar — right, solid red (the "what we did")
+        if actual > 0:
+            ax.bar(i + offset, actual, width=bar_width,
+                   facecolor=RED if not muted else "#FFFFFF",
+                   edgecolor="none" if not muted else RED_FUTURE,
+                   linewidth=1 if muted else 0,
+                   linestyle=(0, (3, 2)) if muted else "solid")
+
+    # Y-axis scale — fit both committed and actual
+    max_val = max([0] + committed_vals + spend)
+    label_offset = max_val * 0.02 if max_val else 1
+
+    # Value labels above each ACTUAL bar (the spend number is what people read)
+    for i, s in enumerate(series):
+        if s["spend"] > 0:
+            label = f"${s['spend']/1000:.1f}k" if s["spend"] >= 1000 else f"${s['spend']:.0f}"
+            muted = s["is_future"] or s.get("is_pre_engagement")
+            color = GREY_MED if muted else BLACK
+            ax.text(i + offset, s["spend"] + label_offset, label,
+                    ha="center", va="bottom", fontsize=8.5,
+                    fontfamily=SANS, color=color)
+
+    ymax = max_val * 1.25 if max_val > 0 else 1000
+    ax.set_ylim(0, ymax)
+    ax.yaxis.set_major_formatter(FuncFormatter(
+        lambda v, _: f"${v/1000:.0f}k" if v >= 1000 else f"${v:.0f}"
+    ))
+    ax.tick_params(axis="y", labelsize=9, colors=GREY_DARK, length=0)
+    ax.tick_params(axis="x", labelsize=10, colors=BLACK, length=0, pad=6)
+
+    ax.set_xticks(np.arange(n))
+    ax.set_xticklabels(months)
+    pre_engagement_flags = [bool(s.get("is_pre_engagement")) for s in series]
+    for i, lbl in enumerate(ax.get_xticklabels()):
+        muted = is_future[i] or pre_engagement_flags[i]
+        lbl.set_color(GREY_MED if muted else GREY_DARK)
+
+    for side in ("top", "right", "left"):
+        ax.spines[side].set_visible(False)
+    ax.spines["bottom"].set_color(GREY_LIGHT)
+    ax.grid(axis="y", color=GREY_LIGHT, linewidth=0.7, zorder=0)
+    ax.set_axisbelow(True)
+
+    # Pair-key — small swatch + label on the right, above the chart
+    key_y = 0.93
+    # Outlined committed swatch
+    fig.patches.extend([
+        plt.Rectangle((0.66, key_y - 0.012), 0.014, 0.024,
+                      transform=fig.transFigure,
+                      facecolor="white", edgecolor=RED, linewidth=1.2),
+    ])
+    fig.text(0.679, key_y, "committed",
+             fontfamily=SANS, fontsize=9, color=GREY_DARK,
+             ha="left", va="center")
+    # Solid actual swatch
+    fig.patches.extend([
+        plt.Rectangle((0.755, key_y - 0.012), 0.014, 0.024,
+                      transform=fig.transFigure,
+                      facecolor=RED, edgecolor="none"),
+    ])
+    fig.text(0.774, key_y, "actual",
+             fontfamily=SANS, fontsize=9, color=GREY_DARK,
+             ha="left", va="center")
+
+    # Header — same as single-client: [LOGO] {NAME} YTD / period label
+    title = f"{d['name'].upper()} YTD"
+    title_x = 0.07
+    logo = _load_logo(code)
+    if logo is not None:
+        zoom = 0.45
+        oi = OffsetImage(np.asarray(logo), zoom=zoom)
+        ab = AnnotationBbox(
+            oi, (0.04, 0.91), xycoords="figure fraction",
+            frameon=False, box_alignment=(0, 0.5),
+        )
+        fig.add_artist(ab)
+        title_x = 0.10
+
+    fig.text(title_x, 0.94, title,
+             fontfamily=BEBAS, fontsize=28, fontweight="bold",
+             color=BLACK, ha="left", va="top")
+    fig.text(title_x, 0.85, d["fy_label"],
+             fontfamily=SANS, fontsize=12, color=GREY_MED,
+             ha="left", va="top")
+
+    # Variance callout (top right)
+    variance = d["variance"]
+    var_color = RED if variance < 0 else BLACK
+    var_label = f"−${abs(variance):,.0f}" if variance < 0 else f"+${variance:,.0f}"
+    fig.text(0.93, 0.85, var_label,
+             fontfamily=BEBAS, fontsize=20, fontweight="bold",
+             color=var_color, ha="right", va="top")
+    fig.text(0.93, 0.78, "VARIANCE",
+             fontfamily=SANS, fontsize=10, color=GREY_MED,
+             ha="right", va="top")
+
+    fig.subplots_adjust(left=0.07, right=0.93, top=0.74, bottom=0.10)
+    return fig
+
+
 def _build_figure(d: dict):
     series = d["series"]
     committed = d["monthly_committed"]
