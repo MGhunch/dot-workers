@@ -895,3 +895,177 @@ def get_meetings():
     except Exception as e:
         print(f"[airtable] Error fetching meetings: {e}")
         return {'today': [], 'tomorrow': []}
+
+
+# ===================
+# SPEND CHART HELPERS
+# ===================
+
+def get_client_for_chart(client_code):
+    """
+    Fetch the client metadata needed to build a YTD spend chart.
+
+    Returns dict with: code, name, year_end (month name string),
+    monthly_committed (currency as float). Returns None if not found.
+    """
+    if not AIRTABLE_API_KEY or not client_code:
+        return None
+
+    try:
+        params = {
+            'filterByFormula': f"{{Client code}}='{client_code}'",
+            'maxRecords': 1,
+        }
+        response = httpx.get(
+            _url(CLIENTS_TABLE),
+            headers=_headers(),
+            params=params,
+            timeout=TIMEOUT,
+        )
+        response.raise_for_status()
+        records = response.json().get('records', [])
+        if not records:
+            return None
+
+        fields = records[0].get('fields', {})
+        return {
+            'code': fields.get('Client code', client_code),
+            'name': fields.get('Clients', client_code),
+            'year_end': fields.get('Year end'),
+            'monthly_committed': float(fields.get('Monthly Committed') or 0),
+        }
+    except Exception as e:
+        print(f"[airtable] Error fetching client {client_code}: {e}")
+        return None
+
+
+def get_tracker_for_client(client_code):
+    """
+    Fetch all Tracker records for one client.
+
+    Returns list of dicts with: spend (float), month (string), createdTime
+    (ISO 8601 string). Filters server-side on the {Client Code} formula
+    field, paginates with offset, and only keeps Project budget entries
+    (matches the Hub's tracker.py spend rule — Extra budget and Project
+    on us don't count toward committed-spend tracking).
+    """
+    if not AIRTABLE_API_KEY or not client_code:
+        return []
+
+    try:
+        # Server-side filter on Tracker's Client Code formula field.
+        # Also restrict to Project budget so we match Hub tracker semantics.
+        formula = (
+            f"AND("
+            f"{{Client Code}}='{client_code}',"
+            f"{{Spend type}}='Project budget'"
+            f")"
+        )
+        params = {'filterByFormula': formula, 'pageSize': 100}
+        all_records = []
+        offset = None
+
+        while True:
+            if offset:
+                params['offset'] = offset
+            response = httpx.get(
+                _url(TRACKER_TABLE),
+                headers=_headers(),
+                params=params,
+                timeout=TIMEOUT,
+            )
+            response.raise_for_status()
+            data = response.json()
+            all_records.extend(data.get('records', []))
+            offset = data.get('offset')
+            if not offset:
+                break
+
+        out = []
+        for record in all_records:
+            fields = record.get('fields', {})
+            spend = fields.get('Spend')
+            if spend is None:
+                continue
+            # Spend can be a number or a string (Airtable currency formatting)
+            if isinstance(spend, str):
+                try:
+                    spend = float(spend.replace('$', '').replace(',', '').strip())
+                except ValueError:
+                    continue
+            out.append({
+                'spend': float(spend),
+                'month': fields.get('Month'),
+                'createdTime': record.get('createdTime'),
+            })
+
+        print(f"[airtable] Tracker records for {client_code}: {len(out)} (Project budget only)")
+        return out
+
+    except Exception as e:
+        print(f"[airtable] Error fetching tracker for {client_code}: {e}")
+        return []
+
+
+def get_budget_history_for_client(client_code):
+    """
+    Fetch all Budget History records for one client.
+
+    Returns list of dicts with: client (string), effective_from (ISO date
+    string 'YYYY-MM-DD'), monthly_committed (float), sorted by
+    effective_from ascending.
+
+    Budget History is the source of truth for committed spend per period.
+    A renegotiation creates a new row with Effective From = first day the
+    new amount applies. The Clients table's Monthly Committed is just the
+    most recent value (and may lag — treat Budget History as canonical).
+    """
+    if not AIRTABLE_API_KEY or not client_code:
+        return []
+
+    try:
+        # Budget History uses 'Client' (not 'Client code') as the key field —
+        # see schema. It's a multilineText field, so an exact-match formula:
+        params = {
+            'filterByFormula': f"{{Client}}='{client_code}'",
+            'pageSize': 100,
+        }
+        all_records = []
+        offset = None
+
+        while True:
+            if offset:
+                params['offset'] = offset
+            response = httpx.get(
+                _url('Budget History'),
+                headers=_headers(),
+                params=params,
+                timeout=TIMEOUT,
+            )
+            response.raise_for_status()
+            data = response.json()
+            all_records.extend(data.get('records', []))
+            offset = data.get('offset')
+            if not offset:
+                break
+
+        out = []
+        for record in all_records:
+            fields = record.get('fields', {})
+            eff = fields.get('Effective From')
+            committed = fields.get('Monthly Committed')
+            if not eff or committed is None:
+                continue
+            out.append({
+                'client': fields.get('Client', client_code),
+                'effective_from': eff,  # ISO date string 'YYYY-MM-DD'
+                'monthly_committed': float(committed),
+            })
+
+        out.sort(key=lambda r: r['effective_from'])
+        print(f"[airtable] Budget History for {client_code}: {len(out)} records")
+        return out
+
+    except Exception as e:
+        print(f"[airtable] Error fetching Budget History for {client_code}: {e}")
+        return []
