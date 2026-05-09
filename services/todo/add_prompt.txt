@@ -90,6 +90,18 @@ Examples:
 - "Update One NZ tracker" → ONE (no division specified → default Marketing)
 - "Email someone at Vodafone" → ONE (Vodafone is the old name for One NZ; no division → default)
 
+## Tools (optional)
+
+You have two tools available for disambiguation:
+- `search_people(search_term="...")` — search the People table by name. Returns matches with their client codes.
+- `get_client_detail(client_code="...")` — verify a client code resolves to a real client. Rarely needed.
+
+Use `search_people` ONCE when a person's name appears in a CLIENTS dump without explicit client context (e.g. "Email Keith re strat pack"). Read the result:
+- Exactly one active match → assign that person's clientCode and bump confidence to High.
+- Multiple matches or none → leave client null and confidence Low (the static rules win).
+
+Don't loop. One search, take the result, move on. Don't call tools for OTHER bucket todos. Don't call tools when an explicit job number or client artefact is already present in the dump — the static rules already handle those.
+
 ## urgent (required) — true or false
 
 Only true if the dump explicitly signals urgency:

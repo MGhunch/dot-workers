@@ -32,6 +32,7 @@ from flask import jsonify
 from anthropic import Anthropic
 
 from utils import airtable
+from . import tools
 
 # ===================
 # CLAUDE CLIENT
@@ -80,17 +81,68 @@ def add_todo(data):
 
     try:
         # ===================
-        # 1. CLASSIFY
+        # 1. CLASSIFY (with tool-loop for disambiguation)
         # ===================
+        messages = [{'role': 'user', 'content': dump}]
+
         response = client.messages.create(
             model='claude-sonnet-4-20250514',
             max_tokens=1500,
-            temperature=0.2,
+            temperature=0.1,
             system=ADD_PROMPT,
-            messages=[{'role': 'user', 'content': dump}]
+            messages=messages,
+            tools=tools.CLAUDE_TOOLS
         )
 
-        content = response.content[0].text
+        # Tool loop — keep going until Claude returns its final JSON
+        max_rounds = 3
+        rounds = 0
+        while response.stop_reason == 'tool_use' and rounds < max_rounds:
+            rounds += 1
+            print(f"[todo-add] Tool round {rounds}")
+
+            # Append assistant turn (preserves tool_use blocks)
+            messages.append({'role': 'assistant', 'content': response.content})
+
+            # Execute every tool call in this turn
+            tool_results = []
+            for block in response.content:
+                if block.type == 'tool_use':
+                    result = tools.execute_tool(block.name, block.input)
+                    tool_results.append({
+                        'type': 'tool_result',
+                        'tool_use_id': block.id,
+                        'content': json.dumps(result)
+                    })
+
+            messages.append({'role': 'user', 'content': tool_results})
+
+            response = client.messages.create(
+                model='claude-sonnet-4-20250514',
+                max_tokens=1500,
+                temperature=0.1,
+                system=ADD_PROMPT,
+                messages=messages,
+                tools=tools.CLAUDE_TOOLS
+            )
+
+        if rounds >= max_rounds and response.stop_reason == 'tool_use':
+            print(f"[todo-add] Hit max tool rounds ({max_rounds}) — using last response")
+
+        # Extract final text from response (first text block)
+        content = ''
+        for block in response.content:
+            if hasattr(block, 'text') and block.text:
+                content = block.text
+                break
+
+        if not content:
+            print(f"[todo-add] Classifier returned no text (stop_reason={response.stop_reason})")
+            return jsonify({
+                'success': False,
+                'error': f'Classifier returned no text (stop_reason={response.stop_reason})'
+            }), 500
+
         content = _strip_markdown_json(content)
         todos = json.loads(content)
 
