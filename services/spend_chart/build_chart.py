@@ -102,11 +102,13 @@ def build_chart_bytes(d: dict) -> bytes:
 
 
 def build_hunch_chart_bytes(d: dict) -> bytes:
-    """Render the Hunch (whole-of-business) chart with paired bars per month
-    — committed (outlined) and actual (solid) — so the gap is visible.
+    """Render the Hunch (whole-of-business) chart. Uses the same renderer
+    as the single-client view — solid bars for actual, stepped dotted line
+    for committed total. The data shape (name='Hunch', code='HUN',
+    rolling-window fy_label) drives the right title, logo, and subtitle.
     """
     import io
-    fig = _build_hunch_figure(d)
+    fig = _build_figure(d)
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=180, facecolor="white")
     plt.close(fig)
