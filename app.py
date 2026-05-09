@@ -14,6 +14,7 @@ from services.setup.handler import process_setup
 from services.file.handler import process_file
 from services.horoscopes.handler import get_horoscope
 from services.todo.handler import send_todo_email
+from services.todo.add_handler import add_todo
 from services.upload.handler import process_upload
 from services.wip_email.handler import send_wip_email
 from services.spend_chart import generate_spend_chart, generate_hunch_spend_chart
@@ -40,7 +41,7 @@ def index():
     return jsonify({
         'service': 'dot-workers',
         'status': 'running',
-        'endpoints': ['/update', '/setup', '/file', '/horoscope', '/todo/email', '/upload', '/wip/email', '/charts/spend', '/charts/spend/hunch']
+        'endpoints': ['/update', '/setup', '/file', '/horoscope', '/todo', '/todo/email', '/upload', '/wip/email', '/charts/spend', '/charts/spend/hunch']
     })
 
 
@@ -70,6 +71,12 @@ def file():
 def horoscope():
     """Get daily horoscope."""
     return get_horoscope(request.json)
+
+
+@app.route('/todo', methods=['POST'])
+def todo_add():
+    """Add a to do (raw dump → classified records). Splits multi-task dumps."""
+    return add_todo(request.json)
 
 
 @app.route('/todo/email', methods=['POST'])
