@@ -1122,3 +1122,80 @@ def get_budget_history_for_client(client_code):
     except Exception as e:
         print(f"[airtable] Error fetching Budget History for {client_code}: {e}")
         return []
+
+
+# ===================
+# TODO TABLE
+# ===================
+
+# Use table ID (rename-proof) — confirmed in todolist SKILL.md
+TODO_TABLE = 'tblm3We91K95mmLgc'
+
+# Cached client record IDs for the Client linked field on Todo records.
+# Source: todolist SKILL.md. Update here if the cache changes.
+TODO_CLIENT_RECORDS = {
+    'ONE': 'recEAFYlnPcooQrzC',
+    'ONS': 'recMHaLoXwaxiRWQV',
+    'ONB': 'recO1Jp0TXphkhg5q',
+    'SKY': 'recZSdB01LYQLOFLF',
+    'TOW': 'recSLnCYdG0L3KJqj',
+    'FIS': 'recv8sQAToWv8QHlj',
+    'LAB': 'recSB3pcAir8bMQ5g',
+    'HUN': 'reckgCEXREn18UzZO',
+}
+
+
+def create_todo(title, bucket, client_code=None, urgent=False, confidence='Low'):
+    """
+    Create a record in the Todo table.
+
+    Args:
+        title: tight imperative rewrite (3-8 words)
+        bucket: 'CLIENTS' or 'OTHER'
+        client_code: 3-letter code (ONE/ONS/ONB/SKY/TOW/FIS/LAB/HUN) or None
+        urgent: bool
+        confidence: 'High' or 'Low'
+
+    Returns:
+        (record_id, error)
+    """
+    if not AIRTABLE_API_KEY:
+        return None, "Missing AIRTABLE_API_KEY"
+
+    if not title:
+        return None, "Missing title"
+
+    if bucket not in ('CLIENTS', 'OTHER'):
+        return None, f"Invalid bucket: {bucket}"
+
+    if confidence not in ('High', 'Low'):
+        return None, f"Invalid confidence: {confidence}"
+
+    fields = {
+        'Title': title,
+        'Bucket': bucket,
+        'Urgent': bool(urgent),
+        'Confidence': confidence,
+    }
+
+    # Optional client link — only set if valid code AND bucket is CLIENTS
+    if client_code and bucket == 'CLIENTS':
+        record_id = TODO_CLIENT_RECORDS.get(client_code.upper())
+        if record_id:
+            fields['Client'] = [record_id]
+        else:
+            print(f"[airtable] Unknown client code '{client_code}' for todo — skipping link")
+
+    try:
+        response = httpx.post(
+            _url(TODO_TABLE),
+            headers=_headers(),
+            json={'fields': fields},
+            timeout=TIMEOUT
+        )
+        response.raise_for_status()
+        new_record = response.json()
+        return new_record.get('id'), None
+
+    except Exception as e:
+        return None, f"Error creating todo: {str(e)}"
