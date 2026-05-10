@@ -24,6 +24,12 @@ from .handler import (
 )
 
 
+# Clients excluded from the Hunch-wide rollover math. ONE/ONS/ONB/SKY/TOW are
+# the focus retainers — anything else (FIS, ad-hoc retainers) is "cream" and
+# should not inflate expected_ytd. Add codes here to exclude.
+EXCLUDE_FROM_HUNCH_ROLLUP = {'FIS'}
+
+
 # ===================
 # HELPERS
 # ===================
@@ -137,7 +143,7 @@ def _build_hunch_series(active_clients_data, today: date) -> dict:
             committed = _committed_for_month(y, m, budget_hist, clients_committed)
             committed_by_month[(y, m)] += committed
             if (y, m) <= today_tuple and (y, m) != today_tuple:
-                # only past completed months count for variance
+                # only past completed months count toward rollover
                 client_committed_in_window += committed
 
         client_status.append({
@@ -154,7 +160,7 @@ def _build_hunch_series(active_clients_data, today: date) -> dict:
         spend = spend_by_month.get((y, m), 0)
         committed = committed_by_month.get((y, m), 0)
         # Treat in-flight current month visually like 'future' (faded outline,
-        # excluded from variance) since it's not done yet.
+        # excluded from rollover) since it's not done yet.
         series.append({
             "month_short": MONTHS[m - 1][:3],
             "month_full": MONTHS[m - 1],
@@ -171,7 +177,7 @@ def _build_hunch_series(active_clients_data, today: date) -> dict:
     active_completed = [s for s in completed if s["committed"] > 0]
     total_ytd = sum(s["spend"] for s in active_completed)
     expected_ytd = sum(s["committed"] for s in active_completed)
-    variance = total_ytd - expected_ytd
+    rollover = expected_ytd - total_ytd  # committed minus delivered: positive = we owe clients
     months_so_far = len(active_completed)
 
     # Headline committed = the current month's total, the most "right now" number
@@ -193,7 +199,7 @@ def _build_hunch_series(active_clients_data, today: date) -> dict:
         "committed_changed": committed_changed,
         "total_ytd": round(total_ytd, 2),
         "expected_ytd": round(expected_ytd, 2),
-        "variance": round(variance, 2),
+        "rollover": round(rollover, 2),
         "months_so_far": months_so_far,
         "series": series,
         "client_count": len(active_clients_data),
@@ -206,13 +212,18 @@ def _summarise(d: dict) -> str:
     period = d["fy_label"]
     ytd = d["total_ytd"]
     expected = d["expected_ytd"]
-    variance = d["variance"]
-    direction = "behind" if variance < 0 else ("ahead" if variance > 0 else "on pace")
+    rollover = d["rollover"]
+    if rollover > 0:
+        direction = "rollover"
+    elif rollover < 0:
+        direction = "over-delivered"
+    else:
+        direction = "on the dot"
     base = (
-        f"{name} — {period}: ${ytd:,.0f} billed against ${expected:,.0f} expected "
+        f"{name} — {period}: ${ytd:,.0f} delivered against ${expected:,.0f} committed "
         f"({d['months_so_far']} completed months, {d['client_count']} active clients). "
-        f"${abs(variance):,.0f} {direction} on a simple-aggregate basis (rollovers reset "
-        f"quarterly per client — this aggregate doesn't reflect carry-forward write-offs)."
+        f"${abs(rollover):,.0f} {direction} on a simple-aggregate basis (per-client "
+        f"quarterly rollovers reset and write off — this number doesn't reflect those carry-forwards)."
     )
     if d.get("committed_changed"):
         base += " Total committed shifted during the window (renegotiations) — chart shows the stepped line."
@@ -236,10 +247,15 @@ def generate_hunch_spend_chart(data):
     """
     print(f"[hunch_chart] === BUILDING HUNCH CHART ===")
 
-    # 1. Pull all clients with non-zero Monthly Committed
+    # 1. Pull all clients with non-zero Monthly Committed, dropping any in the exclude list
     all_clients = airtable.get_all_clients_for_chart()
-    active = [c for c in all_clients if (c.get("monthly_committed") or 0) > 0]
-    print(f"[hunch_chart] Active clients: {len(active)} of {len(all_clients)}")
+    active = [
+        c for c in all_clients
+        if (c.get("monthly_committed") or 0) > 0
+        and c.get("code") not in EXCLUDE_FROM_HUNCH_ROLLUP
+    ]
+    print(f"[hunch_chart] Active clients: {len(active)} of {len(all_clients)} "
+          f"(excluded: {sorted(EXCLUDE_FROM_HUNCH_ROLLUP)})")
 
     if not active:
         return jsonify({
@@ -283,5 +299,5 @@ def generate_hunch_spend_chart(data):
         "client_code": "HUN",
         "client_name": "Hunch",
         "fy_label": chart_data["fy_label"],
-        "variance": chart_data["variance"],
+        "rollover": chart_data["rollover"],
     })

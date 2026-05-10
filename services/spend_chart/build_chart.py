@@ -117,7 +117,7 @@ def build_hunch_chart_bytes(d: dict) -> bytes:
 
 def _build_hunch_figure(d: dict):
     """Hunch-specific figure builder: paired committed vs actual bars per month.
-    Reuses the same chrome (logo, title, variance callout, axis styling) as
+    Reuses the same chrome (logo, title, rollover callout, axis styling) as
     the single-client renderer, just with different bar geometry.
     """
     series = d["series"]
@@ -235,14 +235,14 @@ def _build_hunch_figure(d: dict):
              fontfamily=SANS, fontsize=12, color=GREY_MED,
              ha="left", va="top")
 
-    # Variance callout (top right)
-    variance = d["variance"]
-    var_color = RED if variance < 0 else BLACK
-    var_label = f"−${abs(variance):,.0f}" if variance < 0 else f"+${variance:,.0f}"
-    fig.text(0.93, 0.85, var_label,
+    # Rollover callout (top right) — positive = we owe clients (RED), negative = over-delivered (BLACK)
+    rollover = d["rollover"]
+    roll_color = RED if rollover > 0 else BLACK
+    roll_label = f"${rollover:,.0f}" if rollover >= 0 else f"−${abs(rollover):,.0f}"
+    fig.text(0.93, 0.85, roll_label,
              fontfamily=BEBAS, fontsize=20, fontweight="bold",
-             color=var_color, ha="right", va="top")
-    fig.text(0.93, 0.78, "VARIANCE",
+             color=roll_color, ha="right", va="top")
+    fig.text(0.93, 0.78, "ROLLOVER",
              fontfamily=SANS, fontsize=10, color=GREY_MED,
              ha="right", va="top")
 
