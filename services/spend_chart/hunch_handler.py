@@ -200,6 +200,10 @@ def _build_hunch_series(active_clients_data, today: date) -> dict:
         "total_ytd": round(total_ytd, 2),
         "expected_ytd": round(expected_ytd, 2),
         "rollover": round(rollover, 2),
+        # Pre-existing per-client renderer reads d["variance"] with old sign
+        # convention (delivered − committed, negative = behind). Kept here so
+        # the chart still renders. Not surfaced in the JSON response.
+        "variance": round(-rollover, 2),
         "months_so_far": months_so_far,
         "series": series,
         "client_count": len(active_clients_data),
