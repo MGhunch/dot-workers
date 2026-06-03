@@ -38,19 +38,6 @@ def _url(table):
     return f'https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{table}'
 
 
-def _get_current_quarter():
-    """Get current quarter string (e.g., 'Jan-Mar', 'Apr-Jun')"""
-    month = datetime.now().month
-    if month <= 3:
-        return 'Jan-Mar'
-    elif month <= 6:
-        return 'Apr-Jun'
-    elif month <= 9:
-        return 'Jul-Sep'
-    else:
-        return 'Oct-Dec'
-
-
 def _get_current_month():
     """Get current month name (e.g., 'January')"""
     return datetime.now().strftime('%B')
@@ -433,18 +420,18 @@ def update_project(job_record_id, **kwargs):
 # ===================
 
 def create_tracker(project_record_id, spend=None, spend_type='Project budget',
-                   month=None, quarter=None, notes=None, ballpark=False):
+                   month=None, notes=None, ballpark=False):
     """
     Create a new tracker record linked to a project.
     
     The Link field links to Projects - most other fields are lookups from that.
+    Quarter is a formula field (computed from Month) - never write it.
     
     Args:
         project_record_id: Airtable record ID of the project
         spend: dollar amount as number (e.g., 5000) or string (e.g., '$5,000')
         spend_type: 'Project budget', 'Extra budget', or 'Project on us'
         month: e.g., 'January' (defaults to current month)
-        quarter: e.g., 'Jan-Mar' (defaults to current quarter)
         notes: tracker notes
         ballpark: boolean - True if spend is an estimate (checkbox field)
     
@@ -457,14 +444,11 @@ def create_tracker(project_record_id, spend=None, spend_type='Project budget',
         # Use defaults if not provided
         if not month:
             month = _get_current_month()
-        if not quarter:
-            quarter = _get_current_quarter()
         
         fields = {
             'Link': [project_record_id],  # Linked record to Projects
             'Spend type': spend_type,
             'Month': month,
-            'Quarter': quarter,
         }
         
         # Handle spend - convert string to number if needed
