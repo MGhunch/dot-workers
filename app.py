@@ -11,7 +11,7 @@ from flask_cors import CORS
 # Import handlers
 from services.update.handler import process_update
 from services.setup.handler import process_setup
-from services.file.handler import process_file
+from services.file.handler import process_file, process_folder
 from services.horoscopes.handler import get_horoscope
 from services.todo.handler import send_todo_email
 from services.todo.add_handler import add_todo
@@ -41,7 +41,7 @@ def index():
     return jsonify({
         'service': 'dot-workers',
         'status': 'running',
-        'endpoints': ['/update', '/setup', '/file', '/horoscope', '/todo', '/todo/email', '/upload', '/wip/email', '/charts/spend', '/charts/spend/hunch']
+        'endpoints': ['/update', '/setup', '/file', '/folder', '/horoscope', '/todo', '/todo/email', '/upload', '/wip/email', '/charts/spend', '/charts/spend/hunch']
     })
 
 
@@ -65,6 +65,12 @@ def setup():
 def file():
     """File attachments to Dropbox."""
     return process_file(request.json)
+
+
+@app.route('/folder', methods=['POST'])
+def folder():
+    """Create a Dropbox job folder for a new job (called by Hub /api/new-job)."""
+    return process_folder(request.json)
 
 
 @app.route('/horoscope', methods=['POST'])
