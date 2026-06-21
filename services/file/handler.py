@@ -190,3 +190,33 @@ def process_file(data):
             sender_name=sender_name, job_number=job_number, subject_line=subject_line
         )
         return jsonify({'success': False, 'error': str(e), 'results': results}), 500
+
+
+# ===================
+# FOLDER HANDLER
+# ===================
+
+def process_folder(data):
+    """
+    Create a Dropbox job folder for a new job.
+    Called by Hub /api/new-job after the Project record exists.
+
+    Body: { clientCode, jobNumber, jobName }
+    Returns: { success, jobFolder, dropboxUrl } | { success: False, error }
+    """
+    try:
+        data = data or {}
+        client_code = (data.get('clientCode') or '').strip()
+        job_number = (data.get('jobNumber') or '').strip()
+        job_name = (data.get('jobName') or '').strip()
+
+        if not client_code or not job_number:
+            return jsonify({'success': False, 'error': 'clientCode and jobNumber required'}), 400
+
+        result = file.create_job_folder(client_code, job_number, job_name)
+        status = 200 if result.get('success') else 422
+        return jsonify(result), status
+
+    except Exception as e:
+        print(f'[folder] Error: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
