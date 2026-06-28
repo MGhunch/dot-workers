@@ -362,14 +362,14 @@ def _build_figure(d: dict):
              fontfamily=SANS, fontsize=12, color=GREY_MED,
              ha="left", va="top")
 
-    # Variance callout (top right) — red iff negative
+    # Variance callout (top right) — $ amount always red, OVER/UNDER beneath.
     variance = d["variance"]
-    var_color = RED if variance < 0 else BLACK
-    var_label = f"−${abs(variance):,.0f}" if variance < 0 else f"+${variance:,.0f}"
+    var_word = "OVER" if variance > 0 else ("UNDER" if variance < 0 else "ON PACE")
+    var_label = f"${abs(variance):,.0f}"
     fig.text(0.93, 0.94, var_label,
              fontfamily=BEBAS, fontsize=28, fontweight="bold",
-             color=var_color, ha="right", va="top")
-    fig.text(0.93, 0.85, "VARIANCE",
+             color=RED, ha="right", va="top")
+    fig.text(0.93, 0.85, var_word,
              fontfamily=SANS, fontsize=11, color=GREY_MED,
              ha="right", va="top")
 
