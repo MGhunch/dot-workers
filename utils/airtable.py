@@ -1183,3 +1183,66 @@ def create_todo(title, bucket, client_code=None, urgent=False, confidence='Low')
 
     except Exception as e:
         return None, f"Error creating todo: {str(e)}"
+
+
+# Reverse map: Clients record ID -> code (for logo lookup in emails)
+TODO_CLIENT_CODES = {rec_id: code for code, rec_id in TODO_CLIENT_RECORDS.items()}
+
+
+def get_email_todos():
+    """
+    Get todos for the daily TO DO email.
+
+    Includes live (not Done) todos that are either:
+    - Due today or overdue (NZ time) — mirrors the Hub's 'today' section
+    - Urgent (regardless of due date)
+
+    Returns: list of dicts sorted urgent-first, then earliest due:
+        [{'title': ..., 'urgent': bool, 'clientCode': 'SKY' | None, 'due': 'YYYY-MM-DD' | None}]
+    """
+    if not AIRTABLE_API_KEY:
+        print("[airtable] Missing API key")
+        return []
+
+    try:
+        today = get_nz_today()
+
+        response = httpx.get(
+            _url(TODO_TABLE),
+            headers=_headers(),
+            params={'filterByFormula': "NOT({Done})"},
+            timeout=TIMEOUT
+        )
+        response.raise_for_status()
+
+        todos = []
+        for record in response.json().get('records', []):
+            fields = record.get('fields', {})
+
+            urgent = bool(fields.get('Urgent', False))
+            due_raw = fields.get('Due', '')
+            due = parse_airtable_date(due_raw) if due_raw else None
+
+            # Today's list: due today/overdue, or urgent
+            if not ((due and due <= today) or urgent):
+                continue
+
+            client_link = fields.get('Client', [])
+            client_code = TODO_CLIENT_CODES.get(client_link[0]) if client_link else None
+
+            todos.append({
+                'title': fields.get('Title', ''),
+                'urgent': urgent,
+                'clientCode': client_code,
+                'due': due.isoformat() if due else None,
+            })
+
+        # Urgent first, then earliest due (undated urgent items last within urgent)
+        todos.sort(key=lambda t: (not t['urgent'], t['due'] or '9999-12-31'))
+
+        print(f"[airtable] Email todos: {len(todos)} for today")
+        return todos
+
+    except Exception as e:
+        print(f"[airtable] Error fetching email todos: {e}")
+        return []
