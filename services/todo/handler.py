@@ -10,8 +10,8 @@ Triggered by PA Todobot at 7am NZ weekdays.
 import os
 from flask import jsonify
 
-from utils.airtable import get_todo_jobs, get_meetings, get_next_workday
-from utils.auth import generate_job_link
+from utils.airtable import get_todo_jobs, get_meetings, get_next_workday, get_email_todos
+from utils.auth import generate_job_link, generate_token, HUB_URL
 from utils.connect import PA_POSTMAN_URL, TIMEOUT
 from .email import build_todo_email, get_subject_line
 
@@ -48,6 +48,9 @@ def send_todo_email(data=None):
     print("[todo] Fetching meetings...")
     meetings = get_meetings()
     
+    print("[todo] Fetching todos...")
+    todos = get_email_todos()
+    
     # Get next day label
     _, next_day_label = get_next_workday()
     
@@ -57,7 +60,8 @@ def send_todo_email(data=None):
         len(jobs.get('tomorrow', [])) + 
         len(jobs.get('week', [])) +
         len(meetings.get('today', [])) + 
-        len(meetings.get('tomorrow', []))
+        len(meetings.get('tomorrow', [])) +
+        len(todos)
     )
     
     if total_items == 0:
@@ -88,13 +92,25 @@ def send_todo_email(data=None):
     
     # 4. Build email HTML
     print("[todo] Building email HTML...")
+    
+    # Authed link to the Hub todo view
+    todo_token = generate_token(
+        email=DEFAULT_RECIPIENT,
+        client_code='ALL',
+        first_name=DEFAULT_FIRST_NAME,
+        access_level='Full'
+    )
+    todo_link = f"{HUB_URL}/?view=todo&t={todo_token}" if todo_token else f"{HUB_URL}/?view=todo"
+    
     email_html = build_todo_email(
         jobs=jobs,
         meetings=meetings,
         job_links=job_links,
         next_day_label=next_day_label,
         first_name=DEFAULT_FIRST_NAME,
-        week_label=jobs.get('week_label', 'Coming up this week')
+        week_label=jobs.get('week_label', 'Coming up this week'),
+        todos=todos,
+        todo_link=todo_link
     )
     
     # 5. Send via Postman
@@ -132,7 +148,8 @@ def send_todo_email(data=None):
                 'meetings': {
                     'today': len(meetings.get('today', [])),
                     'tomorrow': len(meetings.get('tomorrow', []))
-                }
+                },
+                'todos': len(todos)
             })
         else:
             return jsonify({
