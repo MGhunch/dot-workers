@@ -1129,7 +1129,18 @@ TODO_CLIENT_RECORDS = {
 }
 
 
-def create_todo(title, bucket, client_code=None, urgent=False, confidence='Low'):
+def add_working_days(start, n):
+    """Add n working days (Mon-Fri) to a date. Weekends are skipped."""
+    current = start
+    added = 0
+    while added < n:
+        current += timedelta(days=1)
+        if current.weekday() < 5:  # Mon=0 .. Fri=4
+            added += 1
+    return current
+
+
+def create_todo(title, bucket, client_code=None, urgent=False, confidence='Low', due=None):
     """
     Create a record in the Todo table.
 
@@ -1139,6 +1150,7 @@ def create_todo(title, bucket, client_code=None, urgent=False, confidence='Low')
         client_code: 3-letter code (ONE/ONS/ONB/SKY/TOW/FIS/LAB/HUN) or None
         urgent: bool
         confidence: 'High' or 'Low'
+        due: 'YYYY-MM-DD' or None — defaults to 5 working days from today (NZ)
 
     Returns:
         (record_id, error)
@@ -1155,11 +1167,16 @@ def create_todo(title, bucket, client_code=None, urgent=False, confidence='Low')
     if confidence not in ('High', 'Low'):
         return None, f"Invalid confidence: {confidence}"
 
+    # Default due: 5 working days out from creation (NZ)
+    if not due:
+        due = add_working_days(get_nz_today(), 5).isoformat()
+
     fields = {
         'Title': title,
         'Bucket': bucket,
         'Urgent': bool(urgent),
         'Confidence': confidence,
+        'Due': due,
     }
 
     # Optional client link — only set if valid code AND bucket is CLIENTS
@@ -1193,14 +1210,14 @@ def get_email_todos():
     """
     Get todos for the daily TO DO email.
 
+    Mirrors the Hub's todo sections exactly — date-only, urgent plays no part:
+    today: live (not Done) todos due today or overdue (NZ time)
+    tomorrow: live todos due next working day (Monday on Fridays)
+
+    Undated todos live in the Hub's 'Soon' section and don't appear in the email.
+
     Returns: {'today': [...], 'tomorrow': [...]}
-
-    today: live (not Done) todos due today/overdue (NZ time) or urgent —
-           mirrors the Hub's 'today' section, urgent jumps the queue.
-    tomorrow: live todos due next working day (Monday on Fridays),
-              non-urgent (urgent already lives in today).
-
-    Each todo: {'title': ..., 'urgent': bool, 'clientCode': 'SKY' | None, 'due': 'YYYY-MM-DD' | None}
+    Each todo: {'title': ..., 'clientCode': 'SKY' | None, 'due': 'YYYY-MM-DD'}
     """
     if not AIRTABLE_API_KEY:
         print("[airtable] Missing API key")
@@ -1224,26 +1241,26 @@ def get_email_todos():
         for record in response.json().get('records', []):
             fields = record.get('fields', {})
 
-            urgent = bool(fields.get('Urgent', False))
             due_raw = fields.get('Due', '')
             due = parse_airtable_date(due_raw) if due_raw else None
+            if not due:
+                continue
 
             client_link = fields.get('Client', [])
             todo = {
                 'title': fields.get('Title', ''),
-                'urgent': urgent,
                 'clientCode': TODO_CLIENT_CODES.get(client_link[0]) if client_link else None,
-                'due': due.isoformat() if due else None,
+                'due': due.isoformat(),
             }
 
-            if (due and due <= today) or urgent:
+            if due <= today:
                 today_todos.append(todo)
-            elif due and due == next_day:
+            elif due == next_day:
                 tomorrow_todos.append(todo)
 
-        # Urgent first, then earliest due (undated urgent items last within urgent)
-        today_todos.sort(key=lambda t: (not t['urgent'], t['due'] or '9999-12-31'))
-        tomorrow_todos.sort(key=lambda t: t['due'] or '9999-12-31')
+        # Earliest due first (overdue floats to the top) — same as the Hub
+        today_todos.sort(key=lambda t: t['due'])
+        tomorrow_todos.sort(key=lambda t: t['due'])
 
         print(f"[airtable] Email todos: {len(today_todos)} today, {len(tomorrow_todos)} tomorrow")
         return {'today': today_todos, 'tomorrow': tomorrow_todos}
