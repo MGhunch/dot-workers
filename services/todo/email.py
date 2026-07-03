@@ -15,6 +15,9 @@ DARK_GREY = '#333'
 NZ_TZ = ZoneInfo('Pacific/Auckland')
 LOGO_URL = "https://raw.githubusercontent.com/MGhunch/dot-hub/main/images/ai2-logo.png"
 ASK_DOT_HEADER = "https://raw.githubusercontent.com/MGhunch/dot-hub/main/images/Askdot-header.png"
+LOGO_BASE = "https://raw.githubusercontent.com/MGhunch/dot-hub/main/images/logos"
+
+TODO_CAP = 5  # Max todos shown; overflow gets a "+N more" line
 
 
 # ===================
@@ -83,6 +86,44 @@ def _job_card(job, hub_link):
 </div>'''
 
 
+def _todo_card(todo):
+    """Build HTML for a todo card - logo + title, flag if urgent."""
+    code = todo.get('clientCode')
+    logo_url = f"{LOGO_BASE}/{code}.png" if code else f"{LOGO_BASE}/Unknown.png"
+    flag = ' <span style="font-size: 14px;">🚩</span>' if todo.get('urgent') else ''
+
+    return f'''<div style="background: #f9f9f9; border-radius: 12px; padding: 12px 18px; margin-bottom: 10px;">
+  <table cellpadding="0" cellspacing="0" border="0" width="100%">
+    <tr>
+      <td style="vertical-align: middle; padding-right: 14px;" width="36">
+        <img src="{logo_url}" alt="" width="32" height="32" style="display: block; border-radius: 50%;">
+      </td>
+      <td style="vertical-align: middle; font-size: 15px; font-weight: 600; color: #1a1a1a;">{todo.get('title', '')}{flag}</td>
+    </tr>
+  </table>
+</div>'''
+
+
+def _todo_section(todos, todo_link):
+    """Build the TO DOS block: capped cards + link to the Hub todo list."""
+    html = _section_subtitle('To dos')
+
+    if not todos:
+        html += _empty_state('Nothing on the list')
+        return html
+
+    for todo in todos[:TODO_CAP]:
+        html += _todo_card(todo)
+
+    overflow = len(todos) - TODO_CAP
+    more = f'<span style="font-size: 13px; color: #999; margin-left: 12px;">+{overflow} more</span>' if overflow > 0 else ''
+
+    html += f'''<div style="margin: 4px 0 0 2px;">
+  <a href="{todo_link}" style="font-size: 13px; font-weight: 600; text-decoration: none; color: #666;">› TO DO LIST</a>{more}
+</div>'''
+    return html
+
+
 def _week_item(job, hub_link):
     """Build HTML for a 'coming up' list item."""
     return f'''<div style="padding: 10px 0; border-bottom: 1px solid #eee;">
@@ -122,7 +163,7 @@ def _footer():
 # MAIN BUILDER
 # ===================
 
-def build_todo_email(jobs, meetings, job_links, next_day_label='Tomorrow', first_name='Michael', week_label='Coming up this week'):
+def build_todo_email(jobs, meetings, job_links, next_day_label='Tomorrow', first_name='Michael', week_label='Coming up this week', todos=None, todo_link='#'):
     """
     Build the complete TO DO email HTML.
     
@@ -133,6 +174,8 @@ def build_todo_email(jobs, meetings, job_links, next_day_label='Tomorrow', first
         next_day_label: 'Tomorrow' or 'Monday'
         first_name: recipient's first name
         week_label: 'Coming up this week' or 'Coming up next week'
+        todos: list of todo dicts (today/overdue/urgent), pre-sorted
+        todo_link: authed link to the Hub todo view
     
     Returns:
         Complete HTML string
@@ -144,6 +187,9 @@ def build_todo_email(jobs, meetings, job_links, next_day_label='Tomorrow', first
     
     # === TODAY SECTION ===
     today_html = _section_header('Today')
+    
+    # Today's todos - first block, before meetings
+    today_html += _todo_section(todos or [], todo_link)
     
     # Today's meetings
     today_html += _section_subtitle('Meetings')
