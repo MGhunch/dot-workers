@@ -61,7 +61,8 @@ def send_todo_email(data=None):
         len(jobs.get('week', [])) +
         len(meetings.get('today', [])) + 
         len(meetings.get('tomorrow', [])) +
-        len(todos)
+        len(todos.get('today', [])) +
+        len(todos.get('tomorrow', []))
     )
     
     if total_items == 0:
@@ -149,7 +150,10 @@ def send_todo_email(data=None):
                     'today': len(meetings.get('today', [])),
                     'tomorrow': len(meetings.get('tomorrow', []))
                 },
-                'todos': len(todos)
+                'todos': {
+                    'today': len(todos.get('today', [])),
+                    'tomorrow': len(todos.get('tomorrow', []))
+                }
             })
         else:
             return jsonify({

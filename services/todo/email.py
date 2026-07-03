@@ -104,8 +104,8 @@ def _todo_card(todo):
 </div>'''
 
 
-def _todo_section(todos, todo_link):
-    """Build the TO DOS block: capped cards + link to the Hub todo list."""
+def _todo_section(todos, todo_link=None):
+    """Build a TO DOS block: capped cards, optional link to the Hub todo list."""
     html = _section_subtitle('To dos')
 
     if not todos:
@@ -116,11 +116,17 @@ def _todo_section(todos, todo_link):
         html += _todo_card(todo)
 
     overflow = len(todos) - TODO_CAP
-    more = f'<span style="font-size: 13px; color: #999; margin-left: 12px;">+{overflow} more</span>' if overflow > 0 else ''
+    more = f'<span style="font-size: 13px; color: #999;">+{overflow} more</span>' if overflow > 0 else ''
 
-    html += f'''<div style="margin: 4px 0 0 2px;">
-  <a href="{todo_link}" style="font-size: 13px; font-weight: 600; text-decoration: none; color: #666;">› TO DO LIST</a>{more}
+    if todo_link:
+        link = f'<a href="{todo_link}" style="font-size: 13px; font-weight: 600; text-decoration: none; color: #666;">› TO DO LIST</a>'
+        more = f'<span style="margin-left: 12px;">{more}</span>' if more else ''
+        html += f'''<div style="margin: 4px 0 0 2px;">
+  {link}{more}
 </div>'''
+    elif more:
+        html += f'<div style="margin: 4px 0 0 2px;">{more}</div>'
+
     return html
 
 
@@ -172,24 +178,21 @@ def build_todo_email(jobs, meetings, job_links, next_day_label='Tomorrow', first
         meetings: {'today': [...], 'tomorrow': [...]}
         job_links: dict mapping job_number -> hub_link
         next_day_label: 'Tomorrow' or 'Monday'
-        first_name: recipient's first name
+        first_name: recipient's first name (kept for signature compatibility)
         week_label: 'Coming up this week' or 'Coming up next week'
-        todos: list of todo dicts (today/overdue/urgent), pre-sorted
-        todo_link: authed link to the Hub todo view
+        todos: {'today': [...], 'tomorrow': [...]} of todo dicts, pre-sorted
+        todo_link: authed link to the Hub todo view (shown under today's block only)
     
     Returns:
         Complete HTML string
     """
-    
-    # === INTRO ===
-    intro_html = f'''<p style="margin: 0 0 6px 0; font-size: 16px;">Hey {first_name},</p>
-<p style="margin: 0; font-size: 16px; color: #666;">Here's what's what and what's hot.</p>'''
+    todos = todos or {}
     
     # === TODAY SECTION ===
     today_html = _section_header('Today')
     
-    # Today's todos - first block, before meetings
-    today_html += _todo_section(todos or [], todo_link)
+    # Today's todos - first block, before meetings (with Hub link)
+    today_html += _todo_section(todos.get('today', []), todo_link)
     
     # Today's meetings
     today_html += _section_subtitle('Meetings')
@@ -210,6 +213,9 @@ def build_todo_email(jobs, meetings, job_links, next_day_label='Tomorrow', first
     
     # === TOMORROW/MONDAY SECTION ===
     tomorrow_html = _section_header(next_day_label)
+    
+    # Tomorrow's todos - no Hub link (linked once, under today's)
+    tomorrow_html += _todo_section(todos.get('tomorrow', []))
     
     # Tomorrow's meetings
     tomorrow_html += _section_subtitle('Meetings')
@@ -248,7 +254,6 @@ def build_todo_email(jobs, meetings, job_links, next_day_label='Tomorrow', first
 <div style="max-width: 600px; margin: 0 auto; background: white; padding: 24px; border-radius: 8px;">
 
 {_header()}
-{intro_html}
 {today_html}
 {tomorrow_html}
 {week_html}
