@@ -1193,19 +1193,22 @@ def get_email_todos():
     """
     Get todos for the daily TO DO email.
 
-    Includes live (not Done) todos that are either:
-    - Due today or overdue (NZ time) — mirrors the Hub's 'today' section
-    - Urgent (regardless of due date)
+    Returns: {'today': [...], 'tomorrow': [...]}
 
-    Returns: list of dicts sorted urgent-first, then earliest due:
-        [{'title': ..., 'urgent': bool, 'clientCode': 'SKY' | None, 'due': 'YYYY-MM-DD' | None}]
+    today: live (not Done) todos due today/overdue (NZ time) or urgent —
+           mirrors the Hub's 'today' section, urgent jumps the queue.
+    tomorrow: live todos due next working day (Monday on Fridays),
+              non-urgent (urgent already lives in today).
+
+    Each todo: {'title': ..., 'urgent': bool, 'clientCode': 'SKY' | None, 'due': 'YYYY-MM-DD' | None}
     """
     if not AIRTABLE_API_KEY:
         print("[airtable] Missing API key")
-        return []
+        return {'today': [], 'tomorrow': []}
 
     try:
         today = get_nz_today()
+        next_day, _ = get_next_workday()
 
         response = httpx.get(
             _url(TODO_TABLE),
@@ -1215,7 +1218,9 @@ def get_email_todos():
         )
         response.raise_for_status()
 
-        todos = []
+        today_todos = []
+        tomorrow_todos = []
+
         for record in response.json().get('records', []):
             fields = record.get('fields', {})
 
@@ -1223,26 +1228,26 @@ def get_email_todos():
             due_raw = fields.get('Due', '')
             due = parse_airtable_date(due_raw) if due_raw else None
 
-            # Today's list: due today/overdue, or urgent
-            if not ((due and due <= today) or urgent):
-                continue
-
             client_link = fields.get('Client', [])
-            client_code = TODO_CLIENT_CODES.get(client_link[0]) if client_link else None
-
-            todos.append({
+            todo = {
                 'title': fields.get('Title', ''),
                 'urgent': urgent,
-                'clientCode': client_code,
+                'clientCode': TODO_CLIENT_CODES.get(client_link[0]) if client_link else None,
                 'due': due.isoformat() if due else None,
-            })
+            }
+
+            if (due and due <= today) or urgent:
+                today_todos.append(todo)
+            elif due and due == next_day:
+                tomorrow_todos.append(todo)
 
         # Urgent first, then earliest due (undated urgent items last within urgent)
-        todos.sort(key=lambda t: (not t['urgent'], t['due'] or '9999-12-31'))
+        today_todos.sort(key=lambda t: (not t['urgent'], t['due'] or '9999-12-31'))
+        tomorrow_todos.sort(key=lambda t: t['due'] or '9999-12-31')
 
-        print(f"[airtable] Email todos: {len(todos)} for today")
-        return todos
+        print(f"[airtable] Email todos: {len(today_todos)} today, {len(tomorrow_todos)} tomorrow")
+        return {'today': today_todos, 'tomorrow': tomorrow_todos}
 
     except Exception as e:
         print(f"[airtable] Error fetching email todos: {e}")
-        return []
+        return {'today': [], 'tomorrow': []}
