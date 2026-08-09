@@ -60,11 +60,6 @@ def _job_card(job, hub_link):
     status = job.get('status', '')
     status_style = f'color: {BRAND_RED}; background: rgba(237, 28, 36, 0.1);' if status == 'Overdue' else 'color: #666; background: #eee;'
     
-    # Teams button - only if channel URL exists
-    teams_button = ''
-    if job.get('channelUrl'):
-        teams_button = f'<a href="{job["channelUrl"]}" style="font-size: 13px; font-weight: 600; text-decoration: none; color: #666; margin-left: 20px;">› TEAMS</a>'
-    
     description = job.get('description', '')
     if len(description) > 100:
         description = description[:97] + '...'
@@ -81,7 +76,7 @@ def _job_card(job, hub_link):
   </div>
   <div style="font-size: 15px; color: #666; line-height: 1.4; margin-bottom: 12px;">{description}</div>
   <div>
-    <a href="{hub_link}" style="font-size: 13px; font-weight: 600; text-decoration: none; color: #666;">› UPDATE</a>{teams_button}
+    <a href="{hub_link}" style="font-size: 13px; font-weight: 600; text-decoration: none; color: #666;">› UPDATE</a>
   </div>
 </div>'''
 
