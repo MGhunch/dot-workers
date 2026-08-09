@@ -80,11 +80,7 @@ def process_file(data):
             return jsonify({'success': False, 'error': lookup_error, 'results': results})
         
         print(f"[file] Found: {project_info['projectName']}")
-        
-        team_id = project_info.get('teamId')
-        channel_id = project_info.get('channelId')
-        channel_url = project_info.get('channelUrl')
-        
+
         # Extract client code from job number (e.g. "TOW 091" → "TOW")
         client_code = job_number.split(' ')[0] if ' ' in job_number else job_number[:3]
         
@@ -125,25 +121,10 @@ def process_file(data):
         print(f"[file] Filed: {files_count} files to {destination}")
         
         # ===================
-        # 3. POST TO TEAMS
+        # 3. TEAMS — RETIRED
         # ===================
-        files_word = 'file' if files_count == 1 else 'files'
-        teams_subject = "Files filed 📁"
-        
-        file_list = ''.join(f'<li>{f}</li>' for f in file_result.get('filesMoved', []))
-        teams_body = f"<ul>{file_list}</ul>"
-        
-        if dropbox_url:
-            teams_body += f'<a href="{dropbox_url}">View files here</a>'
-        
-        print(f"[file] Posting to Teams...")
-        teams_result = connect.post_to_teams(
-            team_id=team_id, channel_id=channel_id,
-            subject=teams_subject, body=teams_body, job_number=job_number
-        )
-        results['teams'] = teams_result
-        print(f"[file] Teams: {teams_result.get('success')}")
-        
+        # Jobs live in Airtable/Dot WIP now. No Teams post.
+
         # ===================
         # 4. SEND CONFIRMATION
         # ===================
@@ -160,7 +141,7 @@ def process_file(data):
             to_email=sender_email, route='file', sender_name=sender_name,
             job_number=job_number, job_name=project_info['projectName'],
             subject_line=subject_line, original_email=original_email,
-            files_url=dropbox_url, channel_url=channel_url, results=results
+            files_url=dropbox_url, results=results
         )
         results['email'] = email_result
         print(f"[file] Email: {email_result.get('success')}")
