@@ -111,6 +111,7 @@ def process_update(data):
     results = {
         'file': None,
         'airtable': None,
+        'todo': None,
         'teams': None,
         'email': None
     }
@@ -268,7 +269,41 @@ Current job data:
         if project_error:
             print(f"[update] Project patch failed: {project_error}")
             # Don't fail the whole update — the Updates record is already saved
-        
+
+        # ===================
+        # 5b. CREATE TODO (when the email leaves Hunch a task)
+        # ===================
+        todo_data = analysis.get('todo')
+        if todo_data and todo_data.get('title'):
+            # Due: email-specified deadline wins, else 4 working days out (NZ)
+            todo_due = todo_data.get('due') or airtable.add_working_days(airtable.get_nz_today(), 4).isoformat()
+            todo_client = job_number.split(' ')[0] if ' ' in job_number else job_number[:3]
+
+            print(f"[update] Creating todo: {todo_data.get('title')} (due {todo_due})")
+            todo_record_id, todo_error = airtable.create_todo(
+                title=todo_data.get('title'),
+                bucket='CLIENTS',
+                client_code=todo_client,
+                urgent=bool(todo_data.get('urgent', False)),
+                confidence='High',
+                due=todo_due
+            )
+
+            if todo_error:
+                print(f"[update] Todo failed: {todo_error}")
+                results['todo'] = {'success': False, 'error': todo_error}
+                # Don't fail the whole update — the update itself is already saved
+            else:
+                print(f"[update] Todo created: {todo_record_id}")
+                results['todo'] = {
+                    'success': True,
+                    'recordId': todo_record_id,
+                    'title': todo_data.get('title'),
+                    'due': todo_due
+                }
+        else:
+            print(f"[update] No todo in this one")
+
         # ===================
         # 6. POST TO TEAMS
         # ===================
@@ -331,6 +366,7 @@ Current job data:
             'status': new_status,
             'withClient': new_with_client,
             'results': results,
+            'todoCreated': results['todo'].get('success', False) if results['todo'] else False,
             'filesFiled': results['file'].get('count', 0) if results['file'] else 0,
             'teamsPosted': results['teams'].get('success', False) if results['teams'] else False,
             'emailSent': results['email'].get('success', False) if results['email'] else False
