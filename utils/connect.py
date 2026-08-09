@@ -146,18 +146,17 @@ def _build_checklist(results, files_url=None):
             has_failure = True
             items.append(_checklist_item(False, "Job not updated"))
     
-    # Teams
-    teams_result = results.get('teams')
-    if teams_result:
-        if teams_result.get('success'):
-            items.append(_checklist_item(True, "Posted to Teams"))
-        elif teams_result.get('skipped'):
-            has_failure = True
-            items.append(_checklist_item(False, "Teams skipped (no channel)"))
+    # Todo (Teams retired — jobs live in Airtable/Dot WIP)
+    todo_result = results.get('todo')
+    if todo_result:
+        if todo_result.get('success'):
+            todo_title = todo_result.get('title', '')
+            label = f'To do added: "{todo_title}"' if todo_title else "To do added"
+            items.append(_checklist_item(True, label))
         else:
             has_failure = True
-            items.append(_checklist_item(False, "Teams post failed"))
-    
+            items.append(_checklist_item(False, "To do not added"))
+
     checklist_html = ''
     if items:
         checklist_html = f'<div style="margin: 16px 0;">{"".join(items)}</div>'
@@ -227,7 +226,9 @@ def _build_setup_checklist(results):
 # ===================
 
 def post_to_teams(team_id, channel_id, subject, body, job_number=None):
-    """Post to Teams channel via PA Teamsbot"""
+    """RETIRED — Teams is no longer part of the job process (jobs live in
+    Airtable/Dot WIP). Kept only so any stray import doesn't break; no
+    active worker calls this."""
     if not team_id or not channel_id:
         print(f"[connect] Teams skipped - missing IDs")
         return {'success': False, 'error': 'Missing teamId or channelId', 'skipped': True}
@@ -267,7 +268,8 @@ def send_confirmation(to_email, route, sender_name=None, job_number=None,
     Send confirmation email after successful action.
     
     If results dict is provided, shows a checklist of what happened.
-    Includes buttons for Teams channel and files if URLs provided.
+    Includes a files button if a URL is provided. (Teams retired — the
+    channel_url param is kept for signature compatibility but ignored.)
     Includes email trail at bottom after signature.
     """
     first_name = _get_first_name(sender_name)
@@ -294,10 +296,8 @@ def send_confirmation(to_email, route, sender_name=None, job_number=None,
         has_failure = False
         intro = "All sorted."
     
-    # Build buttons (Teams + Files)
+    # Build buttons (Files only — Teams retired, channel_url ignored)
     buttons = []
-    if channel_url:
-        buttons.append(f'<a href="{channel_url}" style="display: inline-block; border: 2px solid #ED1C24; color: #ED1C24; text-decoration: none; padding: 8px 20px; border-radius: 50px; font-size: 14px; font-weight: 500;">› Open in Teams</a>')
     if files_url:
         buttons.append(f'<a href="{files_url}" style="display: inline-block; border: 2px solid #ED1C24; color: #ED1C24; text-decoration: none; padding: 8px 20px; border-radius: 50px; font-size: 14px; font-weight: 500;">› See the files</a>')
     buttons_html = f'<div style="margin-top: 12px;">{" &nbsp; ".join(buttons)}</div>' if buttons else ''
