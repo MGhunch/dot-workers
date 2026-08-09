@@ -54,13 +54,15 @@ def _derive_year(month_num: int, created_iso: str) -> int:
     )
 
 
-def _fy_for_today(year_end_month: int, today: date):
+def _fy_for_today(year_end_month: int, today: date, fy_offset: int = 0):
     """Return (start_year, end_year, ordered list of (month_num, year))
-    for the financial year containing today."""
+    for the financial year containing today, shifted back fy_offset years
+    (fy_offset=1 → last financial year)."""
     if today.month > year_end_month:
         fy_start_year = today.year
     else:
         fy_start_year = today.year - 1
+    fy_start_year -= fy_offset
     fy_end_year = fy_start_year + 1
 
     start_m = (year_end_month % 12) + 1  # month after year-end
@@ -105,8 +107,10 @@ def _committed_for_month(year: int, month_num: int,
 
 
 def _build_series(client: dict, tracker_records: list,
-                  budget_history: list, today: date) -> dict:
-    """Aggregate tracker records into the 12-month FY series the renderer expects."""
+                  budget_history: list, today: date,
+                  fy_offset: int = 0) -> dict:
+    """Aggregate tracker records into the 12-month FY series the renderer
+    expects. fy_offset=0 → current FY (YTD), fy_offset=1 → last FY."""
     year_end_name = client["year_end"]
     if year_end_name not in MONTH_NUM:
         raise ValueError(f"Bad year_end value: {year_end_name!r}")
@@ -127,7 +131,7 @@ def _build_series(client: dict, tracker_records: list,
         y = _derive_year(m, created)
         agg[(m, y)] += spend
 
-    fy_start, fy_end, fy_months = _fy_for_today(year_end_num, today)
+    fy_start, fy_end, fy_months = _fy_for_today(year_end_num, today, fy_offset)
     series = []
     today_tuple = (today.year, today.month)
 
@@ -191,10 +195,15 @@ def _build_series(client: dict, tracker_records: list,
         series[-1]["committed"] if series else clients_committed,
     )
 
+    # FY is complete when today is past its final month
+    last_m, last_y = fy_months[-1]
+    fy_complete = (today.year, today.month) > (last_y, last_m)
+
     return {
         "code": client["code"],
         "name": client["name"],
         "year_end_month": year_end_name,
+        "fy_complete": fy_complete,
         "fy_label": f"FY{str(fy_start)[2:]}-{str(fy_end)[2:]}",
         "monthly_committed": current_committed,   # for label
         "committed_changed": committed_changed,   # signals stepped line worth annotating
@@ -214,12 +223,23 @@ def _summarise(d: dict) -> str:
     expected = d["expected_ytd"]
     variance = d["variance"]
     direction = "behind" if variance < 0 else ("ahead" if variance > 0 else "on pace")
-    base = (
-        f"{name} {fy}: ${ytd:,.0f} YTD against ${expected:,.0f} expected "
-        f"({d['months_so_far']} months in). ${abs(variance):,.0f} {direction} "
-        f"on a simple-aggregate basis (note: rollovers reset quarterly — "
-        f"this number doesn't reflect carry-forward write-offs)."
-    )
+    if d.get("fy_complete"):
+        # Completed financial year — talk about it as a finished year, not a pace
+        under_over = "under" if variance < 0 else ("over" if variance > 0 else "bang on")
+        base = (
+            f"{name} {fy} (full year): ${ytd:,.0f} spent against "
+            f"${expected:,.0f} committed. "
+            f"${abs(variance):,.0f} {under_over} on a simple-aggregate basis "
+            f"(note: rollovers reset quarterly — this number doesn't reflect "
+            f"carry-forward write-offs)."
+        )
+    else:
+        base = (
+            f"{name} {fy}: ${ytd:,.0f} YTD against ${expected:,.0f} expected "
+            f"({d['months_so_far']} months in). ${abs(variance):,.0f} {direction} "
+            f"on a simple-aggregate basis (note: rollovers reset quarterly — "
+            f"this number doesn't reflect carry-forward write-offs)."
+        )
     if d.get("committed_changed"):
         base += " Committed amount changed during the FY — chart shows the stepped line."
     return base
@@ -234,7 +254,9 @@ def generate_spend_chart(data):
     Build a YTD spend chart for one client.
 
     Input:
-        data: {"client_code": "TOW"}
+        data: {"client_code": "TOW", "fy": "current" | "last"}
+        fy is optional — defaults to "current" (YTD). "last" renders the
+        previous financial year in full.
 
     Returns:
         Flask jsonify response:
@@ -249,8 +271,11 @@ def generate_spend_chart(data):
         }
     """
     client_code = (data or {}).get("client_code", "").strip().upper()
+    fy_choice = (data or {}).get("fy", "current").strip().lower()
+    fy_offset = 1 if fy_choice == "last" else 0
+
     print(f"[spend_chart] === BUILDING CHART ===")
-    print(f"[spend_chart] Client: {client_code}")
+    print(f"[spend_chart] Client: {client_code}, FY: {fy_choice}")
 
     if not client_code:
         return jsonify({"success": False, "error": "Missing client_code"}), 400
@@ -278,9 +303,9 @@ def generate_spend_chart(data):
     print(f"[spend_chart] Tracker records: {len(tracker_records)}, "
           f"Budget History: {len(budget_history)}")
 
-    # 3. Build the 12-month series (NZ today)
+    # 3. Build the 12-month series (NZ today), for the chosen FY
     today = airtable.get_nz_today()
-    chart_data = _build_series(client, tracker_records, budget_history, today)
+    chart_data = _build_series(client, tracker_records, budget_history, today, fy_offset)
 
     # 4. Render PNG
     try:
@@ -303,5 +328,6 @@ def generate_spend_chart(data):
         "client_code": chart_data["code"],
         "client_name": chart_data["name"],
         "fy_label": chart_data["fy_label"],
+        "fy": fy_choice,
         "variance": chart_data["variance"],
     })

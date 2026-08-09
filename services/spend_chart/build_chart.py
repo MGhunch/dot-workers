@@ -339,8 +339,9 @@ def _build_figure(d: dict):
             ha="right", va="bottom", fontsize=9, fontweight="bold",
             color=BLACK, fontfamily=SANS)
 
-    # Header — [LOGO] {NAME} YTD / FY label, plus variance callout top right.
-    title = f"{d['name'].upper()} YTD"
+    # Header — [LOGO] {NAME} YTD (or FULL YEAR for a completed FY) / FY label,
+    # plus variance callout top right.
+    title = f"{d['name'].upper()} {'FULL YEAR' if d.get('fy_complete') else 'YTD'}"
     title_x = 0.07
     logo = _load_logo(code)
     if logo is not None:
