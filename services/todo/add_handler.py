@@ -86,7 +86,7 @@ def add_todo(data):
         messages = [{'role': 'user', 'content': dump}]
 
         response = client.messages.create(
-            model='claude-sonnet-4-20250514',
+            model='claude-sonnet-4-6',
             max_tokens=1500,
             temperature=0.1,
             system=ADD_PROMPT,
@@ -118,7 +118,7 @@ def add_todo(data):
             messages.append({'role': 'user', 'content': tool_results})
 
             response = client.messages.create(
-                model='claude-sonnet-4-20250514',
+                model='claude-sonnet-4-6',
                 max_tokens=1500,
                 temperature=0.1,
                 system=ADD_PROMPT,
