@@ -158,8 +158,32 @@ Completed → Job finished and delivered
    Look for impediments:
    - "Waiting on..." / "Blocked by..." / "Need X before..."
    - "Can't proceed until..."
-   
+
    If blocker found, include in summary and flag with_client if appropriate.
+
+6. TODO (separate from the update)
+   The update is job news. The todo is a task on Hunch's plate. Same email can produce both.
+
+   Create a todo when the email leaves Hunch something to DO:
+   - The forwarder gives an instruction at the top of a forward – "to do", "todo",
+     "add a to do", "review this", "sort this out". Watch for typos ("do do" means "to do").
+   - The email asks Hunch to act: review, redraft, approve, respond, send, fix, chase.
+   - Client feedback or a client request arrives that needs actioning.
+
+   Do NOT create a todo when:
+   - Pure FYI / status news ("client approved", "this went live", "all done").
+   - Hunch just sent work OUT and the ball is with the client – nothing for Hunch to do yet.
+   - The only "action" belongs to the client, not Hunch.
+
+   todo.title: tight imperative, 3-8 words, action-first. "Review and redraft HFC comms",
+   not "Michael needs to review the email Tracey sent".
+   todo.due: if the email names a deadline for the TASK, calculate the actual date
+   (same rules as NEXT DUE DATE). If no deadline mentioned, return null – the system
+   applies its own default. Do NOT default this yourself.
+   todo.urgent: true only for explicit urgency ("ASAP", "urgent", "today", "by end of day").
+   Default false.
+
+   If no todo is warranted, return null for the whole todo field.
 
 
 === OUTPUT REQUIREMENT ===
@@ -177,6 +201,11 @@ Return ONLY valid JSON (no markdown, no explanation):
   "blockerNote": "[What's blocking, or null]",
   "confidence": "[HIGH/MEDIUM/LOW]",
   "confidenceNote": "[Why confidence is not HIGH, or null]",
+  "todo": {
+    "title": "[3-8 word imperative task]",
+    "due": "[YYYY-MM-DD if the email names a task deadline, else null]",
+    "urgent": [true/false]
+  },
   "teamsMessage": {
     "subject": "[UPDATE: short update]",
     "body": "[formatted message - see template below]"
@@ -231,3 +260,4 @@ Guidelines:
 - When in doubt, extract what you can and use confidence level to signal uncertainty
 - "TBC" or placeholder text without context = LOW confidence
 - Real activity described in natural language = MEDIUM or HIGH confidence
+- "todo" is null unless the email genuinely leaves Hunch a task – when in doubt, null
