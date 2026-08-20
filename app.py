@@ -17,7 +17,11 @@ from services.todo.handler import send_todo_email
 from services.todo.add_handler import add_todo
 from services.upload.handler import process_upload
 from services.wip_email.handler import send_wip_email
-from services.spend_chart import generate_spend_chart, generate_hunch_spend_chart
+from services.spend_chart import (
+    generate_spend_chart,
+    generate_hunch_spend_chart,
+    generate_group_spend_chart,
+)
 
 # ===================
 # APP SETUP
@@ -41,7 +45,7 @@ def index():
     return jsonify({
         'service': 'dot-workers',
         'status': 'running',
-        'endpoints': ['/update', '/setup', '/file', '/folder', '/horoscope', '/todo', '/todo/email', '/upload', '/wip/email', '/charts/spend', '/charts/spend/hunch']
+        'endpoints': ['/update', '/setup', '/file', '/folder', '/horoscope', '/todo', '/todo/email', '/upload', '/wip/email', '/charts/spend', '/charts/spend/hunch', '/charts/spend/group']
     })
 
 
@@ -114,6 +118,13 @@ def charts_spend():
 def charts_spend_hunch():
     """Generate a rolling-12-month spend chart for the whole agency."""
     return generate_hunch_spend_chart(request.json or {})
+
+
+@app.route('/charts/spend/group', methods=['POST'])
+def charts_spend_group():
+    """Generate a YTD spend chart for a group of client codes billed as one
+    relationship. Body: {"group": "onenz" | "onenz-bm", "fy": "current"|"last"}."""
+    return generate_group_spend_chart(request.json or {})
 
 
 # ===================
