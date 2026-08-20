@@ -420,13 +420,25 @@ def update_project(job_record_id, **kwargs):
 # ===================
 
 def create_tracker(project_record_id, spend=None, spend_type='Project budget',
-                   month=None, notes=None, ballpark=False):
+                   month=None, notes=None, ballpark=False,
+                   client_record_id=None, client_code=None):
     """
-    Create a new tracker record linked to a project.
-    
-    The Link field links to Projects - most other fields are lookups from that.
+    Create a new tracker record linked to a project AND to a client.
+
+    TWO LINKS ARE REQUIRED — this is the trap:
+      - 'Link'    -> Projects. Drives the display lookups (Job Number, Client,
+                     Project Name, Owner). A row with only this looks perfect.
+      - 'Clients' -> Clients.  Drives the MONEY. Every rollup on the Clients
+                     table (JAN-MAR, APR-JUN, JUL-SEP, OCT-DEC, This month, and
+                     everything derived from them) traverses this link and this
+                     link only. It is NOT a lookup through 'Link'.
+
+    A tracker row missing 'Clients' renders correctly everywhere and counts
+    nowhere. Do not remove the client link "because it's already on the project".
+    (This cost ONS $65,500 of invisible spend between Jan and Aug 2026.)
+
     Quarter is a formula field (computed from Month) - never write it.
-    
+
     Args:
         project_record_id: Airtable record ID of the project
         spend: dollar amount as number (e.g., 5000) or string (e.g., '$5,000')
@@ -434,23 +446,36 @@ def create_tracker(project_record_id, spend=None, spend_type='Project budget',
         month: e.g., 'January' (defaults to current month)
         notes: tracker notes
         ballpark: boolean - True if spend is an estimate (checkbox field)
-    
+        client_record_id: Airtable record ID of the client. Preferred — callers
+                          coming from get_next_job_number already have this.
+        client_code: 3-letter fallback (e.g. 'ONS') if the record ID isn't handy.
+
     Returns tuple: (record_id, error)
     """
     if not AIRTABLE_API_KEY or not project_record_id:
         return None, "Missing API key or project record ID"
-    
+
     try:
         # Use defaults if not provided
         if not month:
             month = _get_current_month()
-        
+
         fields = {
-            'Link': [project_record_id],  # Linked record to Projects
+            'Link': [project_record_id],  # Linked record to Projects (display)
             'Spend type': spend_type,
             'Month': month,
         }
-        
+
+        # Client link — REQUIRED for this row to count in any rollup.
+        if not client_record_id and client_code:
+            client_record_id = TODO_CLIENT_RECORDS.get(client_code.upper())
+
+        if client_record_id:
+            fields['Clients'] = [client_record_id]
+        else:
+            print("[airtable] WARNING: creating tracker with no client link — "
+                  "this row will not appear in any client rollup")
+
         # Handle spend - convert string to number if needed
         if spend:
             if isinstance(spend, str):
