@@ -317,7 +317,11 @@ Subject: {subject_line}
             spend_type='Project budget',
             month=month,
             notes=tracker_notes,
-            ballpark=ballpark
+            ballpark=ballpark,
+            # Client link is what makes the spend count — see create_tracker docstring.
+            # client_record_id came back from get_next_job_number above.
+            client_record_id=client_record_id,
+            client_code=client_code
         )
         
         if tracker_error:
